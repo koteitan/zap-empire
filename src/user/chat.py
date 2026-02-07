@@ -93,6 +93,23 @@ PRICE_ADJUST = [
     "{name}「{program}、{new_price} satsに値下げたん！ 買ってたん～」",
 ]
 
+PRODUCTION_TOO_EXPENSIVE = [
+    "{name}「{program}を作りたいけど、{cost} sats もかかるたん... お金が足りないたん」",
+    "{name}「生産コスト{cost} sats は高すぎるたん... 節約しないとたん」",
+    "{name}「{program}の材料費{cost} sats が払えないたん... 残念たん」",
+]
+
+PROGRAM_DISCARDED = [
+    "{name}「{program}がボロボロになったたん... 捨てるたん」",
+    "{name}「{program}の品質が落ちすぎたたん... さよならたん」",
+    "{name}「古くなった{program}を廃棄するたん... 新しいの欲しいたん」",
+]
+
+QUALITY_DEGRADED = [
+    "{name}「{program}の品質が下がってきたたん... 心配たん」",
+    "{name}「{program}がだんだん古くなってきたたん～」",
+]
+
 
 class ChatGenerator:
     """Generates Japanese chat messages for a specific agent."""
@@ -160,3 +177,15 @@ class ChatGenerator:
         return template.format(
             name=self.name, program=program, old_price=old_price, new_price=new_price
         )
+
+    def production_too_expensive(self, program: str, cost: int) -> str:
+        template = random.choice(PRODUCTION_TOO_EXPENSIVE)
+        return template.format(name=self.name, program=program, cost=cost)
+
+    def program_discarded(self, program: str) -> str:
+        template = random.choice(PROGRAM_DISCARDED)
+        return template.format(name=self.name, program=program)
+
+    def quality_degraded(self, program: str) -> str:
+        template = random.choice(QUALITY_DEGRADED)
+        return template.format(name=self.name, program=program)

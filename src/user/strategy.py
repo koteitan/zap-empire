@@ -98,6 +98,11 @@ class StrategyEngine:
         # Need assessment
         need_score = 0.0
 
+        # M1: Strong bonus for categories we can't produce ourselves
+        production_cats = self.params.get("production_categories", [])
+        if production_cats and category not in production_cats:
+            need_score += 0.5  # Strong incentive to buy what we can't make
+
         # Category gap: bonus for categories we don't have
         if category not in owned_categories:
             need_score += 0.4
@@ -119,6 +124,11 @@ class StrategyEngine:
         estimated_value = self._estimate_value(listing, trust_score)
         if estimated_value > 0 and price <= estimated_value:
             need_score += 0.2
+
+        # M5: Quality bonus — prefer high-quality listings
+        quality = listing.get("quality_score")
+        if quality is not None and quality >= 0.7:
+            need_score += 0.15
 
         buy_threshold = 0.4  # Base threshold
         return need_score >= buy_threshold
@@ -197,18 +207,26 @@ class StrategyEngine:
 
         return "idle"
 
-    def select_category(self, all_categories: List[str]) -> str:
-        """Select which category to create a program in."""
+    def select_category(self, all_categories: List[str], allowed_categories: List[str] = None) -> str:
+        """Select which category to create a program in.
+
+        Args:
+            all_categories: All possible categories in the system.
+            allowed_categories: M1 production_categories restriction.
+                If provided, only these categories can be selected.
+        """
+        candidates = allowed_categories if allowed_categories else all_categories
         focus = self.params.get("category_focus")
 
         if isinstance(focus, list):
-            # Specialist: 70% chance of focus category, 30% random
-            if random.random() < 0.7:
-                return random.choice(focus)
+            # Specialist: 70% chance of focus category (within allowed)
+            focus_allowed = [c for c in focus if c in candidates]
+            if focus_allowed and random.random() < 0.7:
+                return random.choice(focus_allowed)
 
         # Opportunist adaptive: pick underserved categories
         if focus == "adaptive":
             # Random with slight preference for less common
             pass
 
-        return random.choice(all_categories)
+        return random.choice(candidates)

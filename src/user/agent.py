@@ -215,6 +215,9 @@ class UserAgent:
         # Decay trust scores
         self.reputation.decay_all()
 
+        # M5: Apply depreciation to all owned programs
+        await self._apply_depreciation()
+
         # Select action based on strategy
         state = {
             "balance": self.wallet.balance,
@@ -248,6 +251,32 @@ class UserAgent:
         """Generate, test, and list a new program."""
         program = self.program_gen.generate()
 
+        if program is None:
+            logger.info("Program generation returned None (category restriction)")
+            return
+
+        # M3: Check if agent can afford production cost
+        production_cost = program.get("production_cost", 0)
+        if production_cost > 0:
+            if production_cost > self.wallet.balance:
+                logger.info(
+                    f"Cannot afford production cost {production_cost} sats "
+                    f"(balance: {self.wallet.balance})"
+                )
+                msg = self.chat.production_too_expensive(
+                    program=program["name"], cost=production_cost
+                )
+                await self.post_chat(msg)
+                return
+
+            # Deduct production cost (burn)
+            if not self.wallet.deduct(production_cost):
+                logger.warning(f"Failed to deduct production cost {production_cost}")
+                return
+
+            self.stats["total_sats_spent"] += production_cost
+            logger.info(f"Paid {production_cost} sats production cost for {program['name']}")
+
         # Sandbox test
         if not self.sandbox.test(program["source"]):
             logger.warning(f"Program {program['name']} failed sandbox test")
@@ -272,6 +301,40 @@ class UserAgent:
             program=program["name"], price=program["price"], category=program["category"]
         )
         await self.post_chat(msg)
+
+    async def _apply_depreciation(self):
+        """M5: Apply quality depreciation to all owned programs each tick."""
+        to_discard = []
+        for program in self.programs:
+            quality = program.get("quality_score")
+            if quality is None:
+                continue
+
+            # Determine decay rate based on current quality
+            if quality >= 0.8:
+                rate = 0.999   # High quality decays slowly
+            elif quality < 0.4:
+                rate = 0.995   # Low quality decays faster
+            else:
+                rate = 0.998   # Base decay rate
+
+            program["quality_score"] = quality * rate
+
+            # Mark for discard if below threshold
+            if program["quality_score"] < 0.1:
+                to_discard.append(program)
+
+        # Discard low-quality programs
+        for program in to_discard:
+            self.programs.remove(program)
+            logger.info(f"Discarded {program['name']} (quality {program['quality_score']:.3f} too low)")
+
+            # Delist from marketplace if listed
+            if program.get("listed"):
+                await self.marketplace.delist(program["uuid"])
+
+            msg = self.chat.program_discarded(program=program["name"])
+            await self.post_chat(msg)
 
     async def _try_buy(self):
         """Try to find and buy a program from marketplace."""
@@ -421,6 +484,8 @@ class UserAgent:
                     "price": p.get("price", 0),
                     "listed": p.get("listed", False),
                     "listed_at": p.get("listed_at", 0),
+                    "quality_score": p.get("quality_score"),
+                    "production_cost": p.get("production_cost", 0),
                 }
                 for p in self.programs
             ],

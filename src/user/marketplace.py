@@ -48,6 +48,7 @@ class Marketplace:
             "complexity": content.get("complexity", "medium"),
             "price": content.get("price_sats", price_tag or 0),
             "preview": content.get("preview", ""),
+            "quality_score": content.get("quality_score"),
             "seller_pubkey": event.pubkey,
             "seller_name": self.agent.get_agent_name(event.pubkey),
             "created_at": event.created_at,
@@ -86,7 +87,7 @@ class Marketplace:
         from src.nostr.event import Event
 
         d_tag = program["uuid"]
-        content = json.dumps({
+        content_data = {
             "name": program["name"],
             "description": program.get("description", f"A {program['category']} program"),
             "language": "python",
@@ -95,17 +96,24 @@ class Marketplace:
             "complexity": program.get("complexity", "medium"),
             "price_sats": program["price"],
             "preview": program["source"][:500] if len(program.get("source", "")) > 0 else "",
-        }, ensure_ascii=False)
+        }
+        if program.get("quality_score") is not None:
+            content_data["quality_score"] = round(program["quality_score"], 3)
+        content = json.dumps(content_data, ensure_ascii=False)
+
+        tags = [
+            ["d", d_tag],
+            ["t", "python"],
+            ["t", program["category"]],
+            ["price", str(program["price"]), "sat"],
+        ]
+        if program.get("quality_score") is not None:
+            tags.append(["quality", f"{program['quality_score']:.3f}"])
 
         event = Event(
             kind=30078,
             content=content,
-            tags=[
-                ["d", d_tag],
-                ["t", "python"],
-                ["t", program["category"]],
-                ["price", str(program["price"]), "sat"],
-            ],
+            tags=tags,
         )
         event.sign(self.agent.keypair)
         await self.agent.nostr.publish(event)

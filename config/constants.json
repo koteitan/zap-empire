@@ -17,5 +17,19 @@
   "sandbox_memory_mb": 64,
   "program_categories": ["math", "text", "data_structures", "crypto", "utilities", "generators", "converters", "validators"],
   "log_max_size_mb": 10,
-  "log_max_files": 5
+  "log_max_files": 5,
+  "base_production_cost": {
+    "math": 80,
+    "text": 60,
+    "data_structures": 120,
+    "crypto": 100,
+    "utilities": 70,
+    "generators": 50,
+    "converters": 60,
+    "validators": 90
+  },
+  "depreciation_rate_base": 0.998,
+  "depreciation_rate_high_quality": 0.999,
+  "depreciation_rate_low_quality": 0.995,
+  "depreciation_discard_threshold": 0.1
 }

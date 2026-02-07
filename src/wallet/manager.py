@@ -84,6 +84,43 @@ class WalletManager:
             "total": self.wallet.balance if self._initialized else 0,
         }
 
+    def deduct(self, amount: int) -> bool:
+        """Deduct sats from balance (internal burn, e.g. production cost).
+
+        This is a local balance reduction — the sats are destroyed, not sent.
+        Returns True if deduction succeeded, False if insufficient balance.
+        """
+        if not self._initialized:
+            return False
+        if amount <= 0:
+            return True
+        if amount > self.balance:
+            return False
+
+        # Burn proofs to reduce balance
+        # Select proofs that cover the amount and destroy them
+        try:
+            proofs_to_burn = []
+            remaining = amount
+            for proof in list(self.wallet.proofs):
+                if remaining <= 0:
+                    break
+                proofs_to_burn.append(proof)
+                remaining -= proof.amount
+
+            if remaining > 0:
+                return False  # Not enough proofs
+
+            # Remove burned proofs from wallet
+            for proof in proofs_to_burn:
+                self.wallet.proofs.remove(proof)
+
+            logger.info(f"{self.agent_id}: Burned {amount} sats (production cost)")
+            return True
+        except Exception as e:
+            logger.error(f"{self.agent_id}: Deduct failed: {e}")
+            return False
+
     async def mint_tokens(self, amount: int) -> int:
         """Mint new tokens (for bootstrap only, using FakeWallet)."""
         quote = await self.wallet.request_mint(amount)

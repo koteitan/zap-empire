@@ -19,6 +19,7 @@
       "name": "ぼたん",
       "command": "python src/user/main.py 0",
       "strategy": "Conservative",
+      "production_categories": ["math", "text", "validators"],
       "tick_interval": 60,
       "restart_policy": "on-failure"
     },
@@ -27,6 +28,7 @@
       "name": "わんたん",
       "command": "python src/user/main.py 1",
       "strategy": "Conservative",
+      "production_categories": ["data_structures", "converters", "utilities"],
       "tick_interval": 65,
       "restart_policy": "on-failure"
     },
@@ -35,6 +37,7 @@
       "name": "みかたん",
       "command": "python src/user/main.py 2",
       "strategy": "Aggressive",
+      "production_categories": ["text", "generators", "converters", "utilities"],
       "tick_interval": 45,
       "restart_policy": "on-failure"
     },
@@ -43,6 +46,7 @@
       "name": "ぷりたん",
       "command": "python src/user/main.py 3",
       "strategy": "Aggressive",
+      "production_categories": ["crypto", "validators", "math", "generators"],
       "tick_interval": 50,
       "restart_policy": "on-failure"
     },
@@ -51,7 +55,7 @@
       "name": "くろたん",
       "command": "python src/user/main.py 4",
       "strategy": "Specialist",
-      "categories": ["math", "crypto"],
+      "production_categories": ["math", "crypto"],
       "tick_interval": 70,
       "restart_policy": "on-failure"
     },
@@ -60,7 +64,7 @@
       "name": "しろたん",
       "command": "python src/user/main.py 5",
       "strategy": "Specialist",
-      "categories": ["data_structures", "text"],
+      "production_categories": ["data_structures", "text"],
       "tick_interval": 75,
       "restart_policy": "on-failure"
     },
@@ -69,6 +73,7 @@
       "name": "あおたん",
       "command": "python src/user/main.py 6",
       "strategy": "Generalist",
+      "production_categories": ["math", "text", "data_structures", "crypto", "utilities"],
       "tick_interval": 55,
       "restart_policy": "on-failure"
     },
@@ -77,6 +82,7 @@
       "name": "もちたん",
       "command": "python src/user/main.py 7",
       "strategy": "Generalist",
+      "production_categories": ["generators", "converters", "validators", "utilities", "text"],
       "tick_interval": 60,
       "restart_policy": "on-failure"
     },
@@ -85,6 +91,7 @@
       "name": "ぽんたん",
       "command": "python src/user/main.py 8",
       "strategy": "Opportunist",
+      "production_categories": ["crypto", "utilities", "generators"],
       "tick_interval": 80,
       "restart_policy": "on-failure"
     },
@@ -93,6 +100,7 @@
       "name": "りんたん",
       "command": "python src/user/main.py 9",
       "strategy": "Opportunist",
+      "production_categories": ["converters", "validators", "data_structures"],
       "tick_interval": 90,
       "restart_policy": "on-failure"
     }
