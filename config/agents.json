@@ -1,0 +1,100 @@
+{
+  "agents": [
+    {
+      "id": "nostr-relay",
+      "name": "Nostr Relay (strfry)",
+      "command": "scripts/setup-relay.sh",
+      "restart_policy": "always",
+      "tick_interval": null
+    },
+    {
+      "id": "cashu-mint",
+      "name": "Cashu Mint (nutshell)",
+      "command": "scripts/setup-mint.sh",
+      "restart_policy": "always",
+      "tick_interval": null
+    },
+    {
+      "id": "user0",
+      "name": "ぼたん",
+      "command": "python src/user/main.py 0",
+      "strategy": "Conservative",
+      "tick_interval": 60,
+      "restart_policy": "on-failure"
+    },
+    {
+      "id": "user1",
+      "name": "わんたん",
+      "command": "python src/user/main.py 1",
+      "strategy": "Conservative",
+      "tick_interval": 65,
+      "restart_policy": "on-failure"
+    },
+    {
+      "id": "user2",
+      "name": "みかたん",
+      "command": "python src/user/main.py 2",
+      "strategy": "Aggressive",
+      "tick_interval": 45,
+      "restart_policy": "on-failure"
+    },
+    {
+      "id": "user3",
+      "name": "ぷりたん",
+      "command": "python src/user/main.py 3",
+      "strategy": "Aggressive",
+      "tick_interval": 50,
+      "restart_policy": "on-failure"
+    },
+    {
+      "id": "user4",
+      "name": "くろたん",
+      "command": "python src/user/main.py 4",
+      "strategy": "Specialist",
+      "categories": ["math", "crypto"],
+      "tick_interval": 70,
+      "restart_policy": "on-failure"
+    },
+    {
+      "id": "user5",
+      "name": "しろたん",
+      "command": "python src/user/main.py 5",
+      "strategy": "Specialist",
+      "categories": ["data_structures", "text"],
+      "tick_interval": 75,
+      "restart_policy": "on-failure"
+    },
+    {
+      "id": "user6",
+      "name": "あおたん",
+      "command": "python src/user/main.py 6",
+      "strategy": "Generalist",
+      "tick_interval": 55,
+      "restart_policy": "on-failure"
+    },
+    {
+      "id": "user7",
+      "name": "もちたん",
+      "command": "python src/user/main.py 7",
+      "strategy": "Generalist",
+      "tick_interval": 60,
+      "restart_policy": "on-failure"
+    },
+    {
+      "id": "user8",
+      "name": "ぽんたん",
+      "command": "python src/user/main.py 8",
+      "strategy": "Opportunist",
+      "tick_interval": 80,
+      "restart_policy": "on-failure"
+    },
+    {
+      "id": "user9",
+      "name": "りんたん",
+      "command": "python src/user/main.py 9",
+      "strategy": "Opportunist",
+      "tick_interval": 90,
+      "restart_policy": "on-failure"
+    }
+  ]
+}

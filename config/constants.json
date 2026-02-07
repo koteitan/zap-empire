@@ -1,0 +1,21 @@
+{
+  "relay_url": "ws://127.0.0.1:7777",
+  "mint_url": "http://127.0.0.1:3338",
+  "relay_port": 7777,
+  "mint_port": 3338,
+  "dashboard_port": 8080,
+  "initial_balance_sats": 10000,
+  "tick_interval_default": 60,
+  "status_broadcast_interval": 5,
+  "state_persist_interval": 30,
+  "trade_timeout_offer": 60,
+  "trade_timeout_payment": 120,
+  "trade_timeout_delivery": 120,
+  "max_concurrent_buys": 3,
+  "max_concurrent_sells": 5,
+  "sandbox_timeout": 5,
+  "sandbox_memory_mb": 64,
+  "program_categories": ["math", "text", "data_structures", "crypto", "utilities", "generators", "converters", "validators"],
+  "log_max_size_mb": 10,
+  "log_max_files": 5
+}

@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zap Empire Dashboard</title>
+<style>
+:root {
+  --bg: #0d1117;
+  --bg2: #161b22;
+  --bg3: #21262d;
+  --border: #30363d;
+  --text: #c9d1d9;
+  --text2: #8b949e;
+  --accent: #58a6ff;
+  --green: #3fb950;
+  --yellow: #d29922;
+  --red: #f85149;
+  --purple: #bc8cff;
+  --orange: #d18616;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.header {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.header h1 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.header h1 span { color: var(--yellow); }
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  display: inline-block; margin-right: 6px;
+}
+.status-dot.connected { background: var(--green); }
+.status-dot.disconnected { background: var(--red); }
+.connection-status { color: var(--text2); font-size: 12px; }
+
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto 1fr;
+  gap: 1px;
+  background: var(--border);
+  height: calc(100vh - 49px);
+}
+.panel {
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.panel-header {
+  background: var(--bg2);
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.panel-body {
+  overflow-y: auto;
+  flex: 1;
+  padding: 4px;
+}
+.panel.full-width {
+  grid-column: 1 / -1;
+}
+
+/* Agent Table */
+.agent-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.agent-table th {
+  text-align: left;
+  padding: 6px 8px;
+  color: var(--text2);
+  font-weight: 500;
+  font-size: 11px;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+}
+.agent-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.agent-table tr:hover td {
+  background: var(--bg2);
+}
+.agent-name {
+  font-weight: 600;
+  color: var(--accent);
+}
+.personality-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  display: inline-block;
+}
+.personality-conservative { background: #1a3a2a; color: var(--green); }
+.personality-aggressive { background: #3a1a1a; color: var(--red); }
+.personality-specialist { background: #2a1a3a; color: var(--purple); }
+.personality-generalist { background: #1a2a3a; color: var(--accent); }
+.personality-opportunist { background: #3a2a1a; color: var(--orange); }
+.balance { font-variant-numeric: tabular-nums; }
+.balance-positive { color: var(--green); }
+.balance-negative { color: var(--red); }
+
+/* Chat Feed */
+.chat-msg {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  word-break: break-word;
+}
+.chat-msg:hover { background: var(--bg2); }
+.chat-time {
+  color: var(--text2);
+  font-size: 11px;
+  margin-right: 8px;
+}
+.chat-content { color: var(--text); }
+
+/* Trade Feed */
+.trade-entry {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.trade-entry:hover { background: var(--bg2); }
+.trade-time { color: var(--text2); margin-right: 6px; font-size: 11px; }
+.trade-offer { color: var(--accent); }
+.trade-accept { color: var(--green); }
+.trade-reject { color: var(--red); }
+.trade-payment { color: var(--yellow); }
+.trade-delivery { color: var(--purple); }
+.trade-complete { color: var(--green); font-weight: 600; }
+.trade-zap { color: var(--yellow); font-weight: 600; }
+
+/* Marketplace */
+.listing-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 4px;
+}
+.listing-card:hover { border-color: var(--accent); }
+.listing-name { font-weight: 600; color: var(--accent); }
+.listing-seller { color: var(--text2); font-size: 11px; }
+.listing-price { color: var(--yellow); font-weight: 600; }
+.listing-category {
+  font-size: 10px;
+  background: var(--bg3);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--text2);
+}
+.listing-meta { display: flex; justify-content: space-between; margin-top: 4px; }
+
+/* Stats bar */
+.stats-bar {
+  display: flex;
+  gap: 20px;
+  font-size: 12px;
+}
+.stat { color: var(--text2); }
+.stat strong { color: var(--text); }
+
+/* Tabs */
+.tabs {
+  display: flex;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  padding: 6px 14px;
+  cursor: pointer;
+  color: var(--text2);
+  font-size: 12px;
+  border-bottom: 2px solid transparent;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1><span>&#9889;</span> Zap Empire Dashboard</h1>
+  <div>
+    <span class="connection-status">
+      <span class="status-dot disconnected" id="connDot"></span>
+      <span id="connText">Connecting...</span>
+    </span>
+    &nbsp;&nbsp;
+    <span class="stats-bar">
+      <span class="stat">Events: <strong id="statEvents">0</strong></span>
+      <span class="stat">Trades: <strong id="statTrades">0</strong></span>
+      <span class="stat">Total Supply: <strong id="statSupply">-</strong> sats</span>
+    </span>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- Agent Overview (top-left) -->
+  <div class="panel">
+    <div class="panel-header">Agent Overview</div>
+    <div class="panel-body">
+      <table class="agent-table">
+        <thead>
+          <tr>
+            <th>Agent</th>
+            <th>Type</th>
+            <th>Balance</th>
+            <th>Programs</th>
+            <th>Trades</th>
+            <th>Last Action</th>
+          </tr>
+        </thead>
+        <tbody id="agentTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Chat Feed (top-right) -->
+  <div class="panel">
+    <div class="panel-header">Chat Feed (kind:1)</div>
+    <div class="panel-body" id="chatFeed"></div>
+  </div>
+
+  <!-- Trade Activity (bottom-left) -->
+  <div class="panel">
+    <div class="panel-header">Trade Activity</div>
+    <div class="panel-body" id="tradeFeed"></div>
+  </div>
+
+  <!-- Marketplace (bottom-right) -->
+  <div class="panel">
+    <div class="panel-header">Marketplace (kind:30078)</div>
+    <div class="panel-body" id="marketplace"></div>
+  </div>
+</div>
+
+<script>
+// Agent name/personality registry
+const AGENTS = {
+  // Will be populated from kind:0 events
+};
+
+const AGENT_NAMES = {
+  0: { name: "ぼたん", personality: "conservative" },
+  1: { name: "わんたん", personality: "conservative" },
+  2: { name: "みかたん", personality: "aggressive" },
+  3: { name: "ぷりたん", personality: "aggressive" },
+  4: { name: "くろたん", personality: "specialist" },
+  5: { name: "しろたん", personality: "specialist" },
+  6: { name: "あおたん", personality: "generalist" },
+  7: { name: "もちたん", personality: "generalist" },
+  8: { name: "ぽんたん", personality: "opportunist" },
+  9: { name: "りんたん", personality: "opportunist" },
+};
+
+// State
+let ws = null;
+let pubkeyToAgent = {};
+let agentStatuses = {};
+let listings = {};
+let eventCount = 0;
+let tradeCount = 0;
+const MAX_FEED = 200;
+
+// DOM elements
+const connDot = document.getElementById("connDot");
+const connText = document.getElementById("connText");
+const statEvents = document.getElementById("statEvents");
+const statTrades = document.getElementById("statTrades");
+const statSupply = document.getElementById("statSupply");
+const agentTableBody = document.getElementById("agentTableBody");
+const chatFeed = document.getElementById("chatFeed");
+const tradeFeed = document.getElementById("tradeFeed");
+const marketplace = document.getElementById("marketplace");
+
+function connect() {
+  ws = new WebSocket("ws://127.0.0.1:7777");
+
+  ws.onopen = () => {
+    connDot.className = "status-dot connected";
+    connText.textContent = "Connected to ws://127.0.0.1:7777";
+
+    // Subscribe to all relevant events
+    ws.send(JSON.stringify([
+      "REQ", "dashboard",
+      { "kinds": [0, 1, 4200, 4201, 4202, 4203, 4204, 4210, 4300, 4301, 4400, 9735, 30078] }
+    ]));
+  };
+
+  ws.onclose = () => {
+    connDot.className = "status-dot disconnected";
+    connText.textContent = "Disconnected. Reconnecting...";
+    setTimeout(connect, 3000);
+  };
+
+  ws.onerror = () => {
+    connDot.className = "status-dot disconnected";
+    connText.textContent = "Connection error";
+  };
+
+  ws.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg[0] === "EVENT" && msg.length >= 3) {
+        handleEvent(msg[2]);
+      }
+    } catch (err) {
+      // ignore parse errors
+    }
+  };
+}
+
+function handleEvent(event) {
+  eventCount++;
+  statEvents.textContent = eventCount;
+
+  switch (event.kind) {
+    case 0: handleMetadata(event); break;
+    case 1: handleChat(event); break;
+    case 30078: handleListing(event); break;
+    case 4200: handleTradeOffer(event); break;
+    case 4201: handleTradeAccept(event); break;
+    case 4202: handleTradeReject(event); break;
+    case 4203: handleTradeComplete(event); break;
+    case 4204: handleTradePayment(event); break;
+    case 4210: handleDelivery(event); break;
+    case 4300: handleStatusBroadcast(event); break;
+    case 9735: handleZapReceipt(event); break;
+  }
+}
+
+function handleMetadata(event) {
+  try {
+    const meta = JSON.parse(event.content);
+    pubkeyToAgent[event.pubkey] = meta;
+    AGENTS[event.pubkey] = meta;
+  } catch (e) {}
+}
+
+function getAgentName(pubkey) {
+  const agent = AGENTS[pubkey];
+  if (agent) return agent.name || pubkey.slice(0, 8);
+  return pubkey.slice(0, 8) + "...";
+}
+
+function formatTime(ts) {
+  const d = ts ? new Date(ts * 1000) : new Date();
+  return d.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+// Kind:1 Chat
+function handleChat(event) {
+  const div = document.createElement("div");
+  div.className = "chat-msg";
+  div.innerHTML = `<span class="chat-time">${formatTime(event.created_at)}</span><span class="chat-content">${escapeHtml(event.content)}</span>`;
+  chatFeed.prepend(div);
+  trimFeed(chatFeed, MAX_FEED);
+}
+
+// Kind:30078 Marketplace listings
+function handleListing(event) {
+  try {
+    const content = JSON.parse(event.content);
+    const dTag = getTag(event, "d") || event.id;
+    const priceTag = getTag(event, "price");
+
+    listings[dTag] = {
+      id: dTag,
+      name: content.name,
+      description: content.description,
+      language: content.language,
+      price: content.price_sats || parseInt(priceTag) || 0,
+      seller: event.pubkey,
+      seller_name: getAgentName(event.pubkey),
+      category: content.category || getTag(event, "t") || "unknown",
+      created_at: event.created_at,
+    };
+
+    renderMarketplace();
+  } catch (e) {}
+}
+
+function renderMarketplace() {
+  const sorted = Object.values(listings).sort((a, b) => b.created_at - a.created_at);
+  marketplace.innerHTML = sorted.map(l => `
+    <div class="listing-card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="listing-name">${escapeHtml(l.name)}</span>
+        <span class="listing-price">${l.price} sats</span>
+      </div>
+      <div class="listing-meta">
+        <span class="listing-seller">${escapeHtml(l.seller_name)}</span>
+        <span class="listing-category">${escapeHtml(l.category)}</span>
+      </div>
+    </div>
+  `).join("");
+}
+
+// Trade events
+function handleTradeOffer(event) {
+  tradeCount++;
+  statTrades.textContent = tradeCount;
+  try {
+    const content = JSON.parse(event.content);
+    const buyer = getAgentName(event.pubkey);
+    const seller = getAgentName(getTag(event, "p"));
+    addTradeEntry("trade-offer",
+      `${buyer} offered ${content.offer_sats} sats to ${seller} for ${content.listing_id}`, event.created_at);
+  } catch (e) {}
+}
+
+function handleTradeAccept(event) {
+  try {
+    const content = JSON.parse(event.content);
+    const seller = getAgentName(event.pubkey);
+    const buyer = getAgentName(getTag(event, "p"));
+    addTradeEntry("trade-accept",
+      `${seller} accepted offer from ${buyer} (${content.accepted_sats} sats)`, event.created_at);
+  } catch (e) {}
+}
+
+function handleTradeReject(event) {
+  try {
+    const content = JSON.parse(event.content);
+    const seller = getAgentName(event.pubkey);
+    const buyer = getAgentName(getTag(event, "p"));
+    addTradeEntry("trade-reject",
+      `${seller} rejected offer from ${buyer}: ${content.reason || ""}`, event.created_at);
+  } catch (e) {}
+}
+
+function handleTradePayment(event) {
+  const buyer = getAgentName(event.pubkey);
+  const seller = getAgentName(getTag(event, "p"));
+  addTradeEntry("trade-payment",
+    `${buyer} sent payment to ${seller} [encrypted]`, event.created_at);
+}
+
+function handleDelivery(event) {
+  const seller = getAgentName(event.pubkey);
+  const buyer = getAgentName(getTag(event, "p"));
+  addTradeEntry("trade-delivery",
+    `${seller} delivered program to ${buyer} [encrypted]`, event.created_at);
+}
+
+function handleTradeComplete(event) {
+  try {
+    const content = JSON.parse(event.content);
+    const buyer = getAgentName(event.pubkey);
+    const seller = getAgentName(getTag(event, "p"));
+    addTradeEntry("trade-complete",
+      `Trade complete! ${buyer} confirmed receipt from ${seller}`, event.created_at);
+  } catch (e) {}
+}
+
+function handleZapReceipt(event) {
+  try {
+    const content = JSON.parse(event.content);
+    const recipient = getAgentName(getTag(event, "p"));
+    const sender = getAgentName(getTag(event, "P"));
+    const amount = content.amount_sats || "?";
+    addTradeEntry("trade-zap",
+      `ZAP: ${sender} -> ${recipient}: ${amount} sats`, event.created_at);
+  } catch (e) {}
+}
+
+function addTradeEntry(className, text, ts) {
+  const div = document.createElement("div");
+  div.className = "trade-entry";
+  div.innerHTML = `<span class="trade-time">${formatTime(ts)}</span><span class="${className}">${escapeHtml(text)}</span>`;
+  tradeFeed.prepend(div);
+  trimFeed(tradeFeed, MAX_FEED);
+}
+
+// Kind:4300 Agent Status
+function handleStatusBroadcast(event) {
+  try {
+    const content = JSON.parse(event.content);
+    const agentName = getTag(event, "agent_name") || getAgentName(event.pubkey);
+    agentStatuses[event.pubkey] = {
+      name: agentName,
+      pubkey: event.pubkey,
+      balance: content.balance_sats,
+      programs_owned: content.programs_owned,
+      programs_listed: content.programs_listed,
+      active_trades: content.active_trades,
+      last_action: content.last_action,
+      tick_count: content.tick_count,
+      ts: content.ts || event.created_at,
+    };
+    renderAgentTable();
+  } catch (e) {}
+}
+
+function renderAgentTable() {
+  const agents = Object.values(agentStatuses).sort((a, b) => {
+    const aIdx = parseInt((a.name.match(/user(\d+)/) || [])[1] || "99");
+    const bIdx = parseInt((b.name.match(/user(\d+)/) || [])[1] || "99");
+    return aIdx - bIdx;
+  });
+
+  let totalBalance = 0;
+  let html = "";
+  for (const a of agents) {
+    totalBalance += a.balance || 0;
+    const personality = getPersonality(a.name);
+    const pClass = personality ? `personality-${personality}` : "";
+    const ago = Math.floor((Date.now() / 1000) - (a.ts || 0));
+    const agoStr = ago < 60 ? `${ago}s ago` : `${Math.floor(ago/60)}m ago`;
+
+    // Map agent_id to cute name
+    const cuteName = getCuteName(a.name);
+
+    html += `<tr>
+      <td><span class="agent-name">${escapeHtml(cuteName || a.name)}</span><br><span style="color:var(--text2);font-size:11px">${escapeHtml(a.name)}</span></td>
+      <td><span class="personality-tag ${pClass}">${personality || "?"}</span></td>
+      <td class="balance">${(a.balance || 0).toLocaleString()} sats</td>
+      <td>${a.programs_owned || 0} / ${a.programs_listed || 0}</td>
+      <td>${a.active_trades || 0}</td>
+      <td><span style="color:var(--text2)">${escapeHtml(a.last_action || "idle")}</span><br><span style="font-size:10px;color:var(--text2)">${agoStr}</span></td>
+    </tr>`;
+  }
+  agentTableBody.innerHTML = html;
+  statSupply.textContent = totalBalance > 0 ? totalBalance.toLocaleString() : "-";
+}
+
+function getPersonality(agentName) {
+  const match = agentName.match(/user(\d+)/);
+  if (!match) return null;
+  const idx = parseInt(match[1]);
+  return (AGENT_NAMES[idx] || {}).personality || null;
+}
+
+function getCuteName(agentName) {
+  const match = agentName.match(/user(\d+)/);
+  if (!match) return null;
+  const idx = parseInt(match[1]);
+  return (AGENT_NAMES[idx] || {}).name || null;
+}
+
+// Helpers
+function getTag(event, tagName) {
+  if (!event.tags) return null;
+  for (const t of event.tags) {
+    if (t[0] === tagName && t.length > 1) return t[1];
+  }
+  return null;
+}
+
+function escapeHtml(text) {
+  if (!text) return "";
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function trimFeed(el, max) {
+  while (el.children.length > max) {
+    el.removeChild(el.lastChild);
+  }
+}
+
+// Initialize: render empty table with known agents
+function initAgentTable() {
+  for (let i = 0; i < 10; i++) {
+    const a = AGENT_NAMES[i];
+    agentStatuses[`init_user${i}`] = {
+      name: `user${i}`,
+      balance: 0,
+      programs_owned: 0,
+      programs_listed: 0,
+      active_trades: 0,
+      last_action: "waiting...",
+      ts: 0,
+    };
+  }
+  renderAgentTable();
+}
+
+initAgentTable();
+connect();
+</script>
+</body>
+</html>
