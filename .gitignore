@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+data/
+logs/
+strfry
+strfry-db/
+*.db
+*.egg-info/
+dist/
+build/
+.env
+mint.env
+venv/
+.venv/
+node_modules/
+*.log
