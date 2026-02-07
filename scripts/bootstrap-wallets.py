@@ -52,10 +52,11 @@ async def main():
             )
             await wallet.load_mint()
 
-            # Mint initial tokens
-            await wallet.mint(initial_balance, split=[initial_balance])
+            # Mint initial tokens (cashu 0.18+ requires quote flow)
+            quote = await wallet.request_mint(initial_balance)
+            await wallet.mint(initial_balance, quote_id=quote.quote)
 
-            balance = await wallet.balance()
+            balance = wallet.available_balance
             print(f"  {agent_id} ({agent_name}): {balance} sats")
 
         except Exception as e:

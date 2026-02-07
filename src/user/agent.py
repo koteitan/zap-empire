@@ -270,7 +270,7 @@ class UserAgent:
                 return
 
             # Deduct production cost (burn)
-            if not self.wallet.deduct(production_cost):
+            if not await self.wallet.deduct(production_cost):
                 logger.warning(f"Failed to deduct production cost {production_cost}")
                 return
 
