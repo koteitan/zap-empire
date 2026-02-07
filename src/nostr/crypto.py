@@ -75,7 +75,7 @@ def sign_schnorr(secret_key_bytes: bytes, message_bytes: bytes) -> bytes:
     Returns 64-byte signature.
     """
     privkey = secp256k1.PrivateKey(secret_key_bytes)
-    sig = privkey.schnorr_sign(message_bytes)
+    sig = privkey.schnorr_sign(message_bytes, '', raw=True)
     return sig
 
 
@@ -89,7 +89,7 @@ def verify_schnorr(pubkey_bytes: bytes, message_bytes: bytes, signature_bytes: b
     # Construct a PublicKey object from x-only bytes (add 02 prefix)
     try:
         pubkey_obj = secp256k1.PublicKey(b"\x02" + pubkey_bytes, raw=True)
-        return pubkey_obj.schnorr_verify(message_bytes, signature_bytes)
+        return pubkey_obj.schnorr_verify(message_bytes, signature_bytes, '', raw=True)
     except Exception:
         return False
 
