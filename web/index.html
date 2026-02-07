@@ -52,7 +52,7 @@ body {
 .layout {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
+  grid-template-rows: 1fr 1fr 280px;
   gap: 1px;
   background: var(--border);
   height: calc(100vh - 49px);
@@ -138,7 +138,49 @@ body {
   font-size: 11px;
   margin-right: 8px;
 }
+.chat-name {
+  font-weight: 600;
+  color: var(--accent);
+  margin-right: 6px;
+  font-size: 12px;
+}
 .chat-content { color: var(--text); }
+
+/* Chat Input */
+.chat-input-bar {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+  background: var(--bg2);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.chat-input-bar input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+}
+.chat-input-bar input:focus { border-color: var(--accent); }
+.chat-input-bar button {
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 12px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.chat-input-bar button:hover { opacity: 0.85; }
+.chat-input-bar button:disabled { opacity: 0.4; cursor: default; }
+.owner-label { color: var(--yellow); font-weight: 600; margin-right: 6px; font-size: 12px; }
 
 /* Trade Feed */
 .trade-entry {
@@ -202,6 +244,16 @@ body {
 .tab:hover { color: var(--text); }
 .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
+/* Chart */
+.chart-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.chart-container canvas {
+  width: 100%;
+  height: 100%;
+}
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
@@ -252,6 +304,10 @@ body {
   <div class="panel">
     <div class="panel-header">Chat Feed (kind:1)</div>
     <div class="panel-body" id="chatFeed"></div>
+    <div class="chat-input-bar">
+      <input type="text" id="chatInput" placeholder="メッセージを入力..." />
+      <button id="chatSend" disabled>送信</button>
+    </div>
   </div>
 
   <!-- Trade Activity (bottom-left) -->
@@ -264,6 +320,14 @@ body {
   <div class="panel">
     <div class="panel-header">Marketplace (kind:30078)</div>
     <div class="panel-body" id="marketplace"></div>
+  </div>
+
+  <!-- Sats Distribution Chart (bottom full-width) -->
+  <div class="panel full-width">
+    <div class="panel-header">Sats Distribution Over Time (100% Stacked)</div>
+    <div class="chart-container">
+      <canvas id="distChart"></canvas>
+    </div>
   </div>
 </div>
 
@@ -289,11 +353,19 @@ const AGENT_NAMES = {
 // State
 let ws = null;
 let pubkeyToAgent = {};
+let pubkeyToUserName = {}; // pubkey -> "user0" etc.
 let agentStatuses = {};
 let listings = {};
 let eventCount = 0;
 let tradeCount = 0;
 const MAX_FEED = 200;
+
+// Chart data: array of { ts, balances: { user0: N, user1: N, ... } }
+let balanceHistory = [];
+const AGENT_COLORS = [
+  "#3fb950", "#58a6ff", "#f85149", "#d29922", "#bc8cff",
+  "#d18616", "#39d353", "#79c0ff", "#ff7b72", "#e3b341"
+];
 
 // DOM elements
 const connDot = document.getElementById("connDot");
@@ -306,6 +378,7 @@ const agentTableBody = document.getElementById("agentTableBody");
 const chatFeed = document.getElementById("chatFeed");
 const tradeFeed = document.getElementById("tradeFeed");
 const marketplace = document.getElementById("marketplace");
+const distChart = document.getElementById("distChart");
 
 function connect() {
   ws = new WebSocket("ws://127.0.0.1:7777");
@@ -385,9 +458,12 @@ function formatTime(ts) {
 
 // Kind:1 Chat
 function handleChat(event) {
+  const name = getCuteNameByPubkey(event.pubkey);
+  const isOwner = ownerCrypto && event.pubkey === ownerCrypto.pubHex;
+  const nameClass = isOwner ? "owner-label" : "chat-name";
   const div = document.createElement("div");
   div.className = "chat-msg";
-  div.innerHTML = `<span class="chat-time">${formatTime(event.created_at)}</span><span class="chat-content">${escapeHtml(event.content)}</span>`;
+  div.innerHTML = `<span class="chat-time">${formatTime(event.created_at)}</span><span class="${nameClass}">${escapeHtml(name)}</span><span class="chat-content">${escapeHtml(event.content)}</span>`;
   chatFeed.prepend(div);
   trimFeed(chatFeed, MAX_FEED);
 }
@@ -533,6 +609,10 @@ function handleStatusBroadcast(event) {
     const content = JSON.parse(event.content);
     const agentName = getTag(event, "agent_name") || getAgentName(event.pubkey);
     const newTs = event.created_at || 0;
+
+    // Track pubkey -> userName mapping for chat name resolution
+    pubkeyToUserName[event.pubkey] = agentName;
+
     const existing = agentStatuses[agentName];
     // Only update if newer than existing data
     if (existing && existing.ts && existing.ts > newTs) return;
@@ -548,6 +628,9 @@ function handleStatusBroadcast(event) {
       ts: newTs,
     };
     renderAgentTable();
+
+    // Record raw balance event for chart (uses all events, not just latest)
+    recordBalanceEvent(newTs, agentName, content.balance_sats || 0);
   } catch (e) {}
 }
 
@@ -609,6 +692,19 @@ function getCuteName(agentName) {
   return (AGENT_NAMES[idx] || {}).name || null;
 }
 
+function getCuteNameByPubkey(pubkey) {
+  const userName = pubkeyToUserName[pubkey];
+  if (userName) {
+    return getCuteName(userName) || userName;
+  }
+  const agent = AGENTS[pubkey];
+  if (agent && agent.name) {
+    const cute = getCuteName(agent.name);
+    return cute || agent.name;
+  }
+  return pubkey.slice(0, 8);
+}
+
 // Helpers
 function getTag(event, tagName) {
   if (!event.tags) return null;
@@ -631,6 +727,162 @@ function trimFeed(el, max) {
   }
 }
 
+// ---- Balance History Chart ----
+// Store raw kind:4300 events individually
+let rawStatusEvents = []; // { ts, agent, balance }
+let chartDirty = false;
+
+function recordBalanceEvent(ts, agentName, balance) {
+  rawStatusEvents.push({ ts, agent: agentName, balance });
+  chartDirty = true;
+  // Debounce rebuild (batch initial load)
+  if (!recordBalanceEvent._timer) {
+    recordBalanceEvent._timer = setTimeout(() => {
+      recordBalanceEvent._timer = null;
+      if (chartDirty) { rebuildBalanceHistory(); chartDirty = false; }
+    }, 200);
+  }
+}
+
+function rebuildBalanceHistory() {
+  // Sort all raw events chronologically
+  rawStatusEvents.sort((a, b) => a.ts - b.ts);
+
+  // Walk through chronologically, tracking each agent's latest known balance
+  const running = {};
+  for (let i = 0; i < 10; i++) running[`user${i}`] = 0;
+
+  balanceHistory = [];
+  let prevTs = -1;
+  for (const evt of rawStatusEvents) {
+    running[evt.agent] = evt.balance;
+    if (evt.ts === prevTs) {
+      // Same timestamp: overwrite last snapshot
+      balanceHistory[balanceHistory.length - 1].balances = { ...running };
+    } else {
+      balanceHistory.push({ ts: evt.ts, balances: { ...running } });
+      prevTs = evt.ts;
+    }
+  }
+  renderChart();
+}
+
+function renderChart() {
+  if (balanceHistory.length < 2) return;
+
+  const canvas = distChart;
+  const container = canvas.parentElement;
+  const rect = container.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  const W = rect.width;
+  const H = rect.height;
+
+  const PAD_LEFT = 50;
+  const PAD_RIGHT = 80;
+  const PAD_TOP = 10;
+  const PAD_BOTTOM = 30;
+  const plotW = W - PAD_LEFT - PAD_RIGHT;
+  const plotH = H - PAD_TOP - PAD_BOTTOM;
+
+  ctx.clearRect(0, 0, W, H);
+
+  const agents = [];
+  for (let i = 0; i < 10; i++) agents.push(`user${i}`);
+
+  const data = balanceHistory;
+  const n = data.length;
+  const tsMin = data[0].ts;
+  const tsMax = data[n - 1].ts;
+  const tsRange = tsMax - tsMin || 1;
+
+  // Compute totals and percentages
+  const percentages = data.map(snap => {
+    let total = 0;
+    for (const a of agents) total += snap.balances[a] || 0;
+    const pcts = {};
+    for (const a of agents) pcts[a] = total > 0 ? (snap.balances[a] || 0) / total : 0;
+    return pcts;
+  });
+
+  // Draw stacked areas (bottom to top)
+  for (let ai = agents.length - 1; ai >= 0; ai--) {
+    ctx.beginPath();
+    // Top edge (cumulative from agent 0 to ai)
+    for (let di = 0; di < n; di++) {
+      let cumTop = 0;
+      for (let j = 0; j <= ai; j++) cumTop += percentages[di][agents[j]];
+      const x = PAD_LEFT + ((data[di].ts - tsMin) / tsRange) * plotW;
+      const y = PAD_TOP + plotH * (1 - cumTop);
+      if (di === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    // Bottom edge (cumulative from agent 0 to ai-1), reversed
+    for (let di = n - 1; di >= 0; di--) {
+      let cumBot = 0;
+      for (let j = 0; j < ai; j++) cumBot += percentages[di][agents[j]];
+      const x = PAD_LEFT + ((data[di].ts - tsMin) / tsRange) * plotW;
+      const y = PAD_TOP + plotH * (1 - cumBot);
+      ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = AGENT_COLORS[ai];
+    ctx.globalAlpha = 0.85;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // Y-axis labels
+  ctx.fillStyle = "#8b949e";
+  ctx.font = "10px monospace";
+  ctx.textAlign = "right";
+  for (let p = 0; p <= 100; p += 25) {
+    const y = PAD_TOP + plotH * (1 - p / 100);
+    ctx.fillText(`${p}%`, PAD_LEFT - 6, y + 3);
+    ctx.strokeStyle = "#30363d";
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(PAD_LEFT, y);
+    ctx.lineTo(PAD_LEFT + plotW, y);
+    ctx.stroke();
+  }
+
+  // X-axis labels
+  ctx.textAlign = "center";
+  const labelCount = Math.min(6, n);
+  for (let i = 0; i < labelCount; i++) {
+    const di = Math.floor(i * (n - 1) / (labelCount - 1));
+    const x = PAD_LEFT + ((data[di].ts - tsMin) / tsRange) * plotW;
+    const y = PAD_TOP + plotH + 16;
+    const d = new Date(data[di].ts * 1000);
+    ctx.fillText(d.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }), x, y);
+  }
+
+  // Agent names on right edge of chart
+  const lastPcts = percentages[n - 1];
+  ctx.font = "bold 11px monospace";
+  ctx.textAlign = "left";
+  for (let ai = 0; ai < agents.length; ai++) {
+    let cumBot = 0;
+    for (let j = 0; j < ai; j++) cumBot += lastPcts[agents[j]];
+    let cumTop = cumBot + lastPcts[agents[ai]];
+    const bandMidY = PAD_TOP + plotH * (1 - (cumBot + cumTop) / 2);
+    const bandH = plotH * lastPcts[agents[ai]];
+    // Only draw name if band is tall enough
+    if (bandH < 8) continue;
+    const cute = AGENT_NAMES[ai].name;
+    const labelX = PAD_LEFT + plotW + 6;
+    ctx.fillStyle = AGENT_COLORS[ai];
+    ctx.fillText(cute, labelX, bandMidY + 4);
+  }
+}
+
+// Resize chart on window resize
+window.addEventListener("resize", () => { if (balanceHistory.length >= 2) renderChart(); });
+
 // Initialize: render empty table with known agents
 function initAgentTable() {
   for (let i = 0; i < 10; i++) {
@@ -648,8 +900,85 @@ function initAgentTable() {
   renderAgentTable();
 }
 
+// ---- Owner Chat (kind:1 posting via noble-curves) ----
+const OWNER_NAME = "オーナー";
+let ownerCrypto = null;
+const chatInput = document.getElementById("chatInput");
+const chatSend = document.getElementById("chatSend");
+
+// Sync: register owner pubkey from localStorage before any events arrive
+{
+  const cachedPub = localStorage.getItem("owner_pubhex");
+  if (cachedPub) {
+    pubkeyToUserName[cachedPub] = OWNER_NAME;
+    AGENTS[cachedPub] = { name: OWNER_NAME };
+  }
+}
+
+async function initOwnerCrypto() {
+  try {
+    const { schnorr } = await import("https://esm.sh/@noble/curves@1.8.1/secp256k1");
+    const { sha256 } = await import("https://esm.sh/@noble/hashes@1.7.1/sha256");
+    const { bytesToHex, randomBytes } = await import("https://esm.sh/@noble/hashes@1.7.1/utils");
+
+    let privHex = localStorage.getItem("owner_privkey");
+    if (!privHex) {
+      privHex = bytesToHex(randomBytes(32));
+      localStorage.setItem("owner_privkey", privHex);
+    }
+    const pubHex = bytesToHex(schnorr.getPublicKey(privHex));
+
+    ownerCrypto = { schnorr, sha256, bytesToHex, privHex, pubHex };
+
+    // Register owner name + cache pubkey for future loads
+    pubkeyToUserName[pubHex] = OWNER_NAME;
+    AGENTS[pubHex] = { name: OWNER_NAME };
+    localStorage.setItem("owner_pubhex", pubHex);
+
+    chatSend.disabled = false;
+  } catch (e) {
+    console.error("Failed to load crypto:", e);
+  }
+}
+
+async function publishOwnerChat(content) {
+  if (!ownerCrypto || !ws || ws.readyState !== 1) return;
+  const { schnorr, sha256, bytesToHex, privHex, pubHex } = ownerCrypto;
+
+  const event = {
+    pubkey: pubHex,
+    created_at: Math.floor(Date.now() / 1000),
+    kind: 1,
+    tags: [],
+    content: content,
+  };
+  const serialized = JSON.stringify([
+    0, event.pubkey, event.created_at, event.kind, event.tags, event.content
+  ]);
+  const hash = sha256(new TextEncoder().encode(serialized));
+  event.id = bytesToHex(hash);
+  event.sig = bytesToHex(schnorr.sign(hash, privHex));
+
+  ws.send(JSON.stringify(["EVENT", event]));
+}
+
+chatSend.addEventListener("click", () => {
+  const msg = chatInput.value.trim();
+  if (!msg) return;
+  publishOwnerChat(msg);
+  chatInput.value = "";
+});
+
+chatInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.isComposing) {
+    e.preventDefault();
+    chatSend.click();
+  }
+});
+
 initAgentTable();
 connect();
+initOwnerCrypto();
 </script>
 </body>
 </html>

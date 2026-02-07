@@ -1,6 +1,6 @@
 {
   "relay_url": "ws://127.0.0.1:7777",
-  "mint_url": "https://mint.coinos.io",
+  "mint_url": "http://127.0.0.1:3338",
   "relay_port": 7777,
   "mint_port": 3338,
   "dashboard_port": 8080,

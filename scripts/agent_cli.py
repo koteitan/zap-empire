@@ -503,12 +503,60 @@ async def cmd_broadcast_all():
         print(f"treasury: error: {e}")
 
 
+async def cmd_read_chat(since_ts: int = 0):
+    """Read recent kind:1 messages, return all messages with sender name."""
+    import websockets
+    config = load_config()
+
+    # Build pubkey -> name mapping
+    pubkey_to_name = {}
+    for i in range(10):
+        try:
+            kp = KeyPair.load(os.path.join("data", f"user{i}"))
+            pubkey_to_name[kp.public_key_hex] = AGENT_CONFIG[i]["name"]
+        except Exception:
+            pass
+
+    filt = {"kinds": [1], "limit": 30}
+    if since_ts > 0:
+        filt["since"] = since_ts
+
+    async with websockets.connect(config["relay_url"]) as ws:
+        await ws.send(json.dumps(["REQ", "chat", filt]))
+        messages = []
+        while True:
+            try:
+                raw = await asyncio.wait_for(ws.recv(), timeout=3)
+                msg = json.loads(raw)
+                if msg[0] == "EOSE":
+                    break
+                if msg[0] == "EVENT" and len(msg) >= 3:
+                    ev = msg[2]
+                    name = pubkey_to_name.get(ev["pubkey"], "オーナー")
+                    messages.append({
+                        "name": name,
+                        "content": ev["content"],
+                        "created_at": ev["created_at"],
+                    })
+            except asyncio.TimeoutError:
+                break
+        await ws.send(json.dumps(["CLOSE", "chat"]))
+
+    messages.sort(key=lambda m: m["created_at"])
+    print(json.dumps(messages, ensure_ascii=False))
+
+
 async def main():
+    # Special commands that don't need agent_index
+    if len(sys.argv) >= 2 and sys.argv[1] == "broadcast-all":
+        await cmd_broadcast_all()
+        return
+    if len(sys.argv) >= 2 and sys.argv[1] == "read_chat":
+        since = int(sys.argv[2]) if len(sys.argv) > 2 else 0
+        await cmd_read_chat(since)
+        return
+
     if len(sys.argv) < 3:
-        # Special case: broadcast-all needs no agent_index
-        if len(sys.argv) == 2 and sys.argv[1] == "broadcast-all":
-            await cmd_broadcast_all()
-            return
         print(__doc__)
         sys.exit(1)
 
