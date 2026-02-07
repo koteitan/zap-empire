@@ -509,7 +509,7 @@ function handleStatusBroadcast(event) {
   try {
     const content = JSON.parse(event.content);
     const agentName = getTag(event, "agent_name") || getAgentName(event.pubkey);
-    agentStatuses[event.pubkey] = {
+    agentStatuses[agentName] = {
       name: agentName,
       pubkey: event.pubkey,
       balance: content.balance_sats,
@@ -596,7 +596,7 @@ function trimFeed(el, max) {
 function initAgentTable() {
   for (let i = 0; i < 10; i++) {
     const a = AGENT_NAMES[i];
-    agentStatuses[`init_user${i}`] = {
+    agentStatuses[`user${i}`] = {
       name: `user${i}`,
       balance: 0,
       programs_owned: 0,
