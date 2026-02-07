@@ -10,7 +10,7 @@ Nostr + Cashu ecash を用いた自律エージェント経済システム「Zap
 
 | ドキュメント | 内容 |
 |---|---|
-| [自律フレームワーク設計](./autonomy-design.md) | プロセス管理、heartbeat、ライフサイクル、クラッシュリカバリ、zapctl CLI |
+| [自律フレームワーク設計](./autonomy-design.md) | プロセス管理、自律行動ループ、ライフサイクル、クラッシュリカバリ、zapctl CLI |
 | [Nostr リレー＆クライアント設計](./nostr-design.md) | strfry リレー、event kind 定義、取引プロトコル、Web ダッシュボード |
 | [Cashu Wallet＆決済システム設計](./zap-design.md) | Nutshell mint、ウォレット管理、Zap 支払いフロー、エスクロー |
 

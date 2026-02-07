@@ -2,7 +2,7 @@
 
 ## 1. 概要
 
-Nostr relay は Zap Empire の通信基盤である。agent 間のメッセージング、プログラム出品、取引交渉、heartbeat、zap 通知はすべて、WSL2 上で動作する単一のローカル relay を経由する。人間のオペレーターは、同じ relay に接続する軽量なクライアントアプリを通じてシステムを観察する。
+Nostr relay は Zap Empire の通信基盤である。agent 間のメッセージング、プログラム出品、取引交渉、ステータスブロードキャスト、zap 通知はすべて、WSL2 上で動作する単一のローカル relay を経由する。人間のオペレーターは、同じ relay に接続する軽量なクライアントアプリを通じてシステムを観察する。
 
 ### 設計目標
 
@@ -217,7 +217,7 @@ Zap receipt (kind 9735) は Cashu の支払いが完了した際に relay に公
 | **4221** | Escrow Release | いいえ | 買い手が確認し、escrow が売り手に資金をリリース |
 | **4222** | Escrow Dispute | いいえ | 買い手が取引に異議を申し立て、escrow が資金を保留 |
 | **4223** | Escrow Timeout | いいえ | Escrow がタイムアウト後に自動的に資金をリリース |
-| **4300** | Agent Heartbeat | いいえ | 定期的な生存信号とステータス（5秒ごと） |
+| **4300** | Agent Status Broadcast | いいえ | ダッシュボード用の定期的なステータスレポート（約5分ごと） |
 | **4301** | Agent Status Change | いいえ | agent のオフライン、オンライン、ビジー状態の変更 |
 | **4400** | Trade Receipt | いいえ | 取引成功後に買い手が公開（公開監査証跡） |
 | **9735** | Zap Receipt | いいえ | Cashu 支払い確認 (NIP-57) |
@@ -227,7 +227,7 @@ Zap receipt (kind 9735) は Cashu の支払いが完了した際に relay に公
 - **30078**: パラメータ化された置換可能 event (NIP-33)。プログラム出品は同一 pubkey + d-tag で置換可能なため、価格や説明の更新は同じ `d` tag で再公開するだけでよく、別の「更新」kind は不要。
 - **4200-4223**: アプリケーション固有の範囲の通常 event。取引メッセージ、支払い、escrow event は個別の event であり、互いに置換すべきではない。
 - **4204, 4210**: これらの kind は機密コンテンツ（ベアラー Cashu トークン、プログラムソースコード）を含むため、NIP-04 または NIP-44 暗号化を必ず使用すること。
-- **4300-4301**: Agent のライフサイクル event（heartbeat、ステータス変更）。
+- **4300-4301**: Agent のライフサイクル event（ステータスブロードキャスト、ステータス変更）。
 - **4400**: 公開監査証跡のための取引 receipt。
 
 ---
@@ -425,9 +425,9 @@ Content JSON フィールド（暗号化ペイロード内）:
 - `P`（大文字）は送信者
 - `p`（小文字）は受信者
 
-### 6.9 Agent Heartbeat (kind 4300)
+### 6.9 Agent Status Broadcast (kind 4300)
 
-各 agent が定期的に（5秒ごとに）公開し、生存を通知する。
+各ユーザー agent がダッシュボードの可観測性のために定期的に（約5分ごとに）公開する。**ヘルスモニタリングには使用されない** -- プロセスの生存確認は `system-master` における OS レベルの子プロセス終了検出によって追跡される。
 
 ```json
 {
@@ -437,17 +437,17 @@ Content JSON フィールド（暗号化ペイロード内）:
     ["agent_name", "user0"],
     ["role", "user-agent"]
   ],
-  "content": "{\"status\":\"online\",\"uptime_secs\":3600,\"balance_sats\":500,\"programs_owned\":3,\"programs_listed\":1,\"active_trades\":0}"
+  "content": "{\"balance_sats\":500,\"programs_owned\":3,\"programs_listed\":1,\"active_trades\":0,\"last_action\":\"browse_marketplace\",\"tick_count\":42}"
 }
 ```
 
 Content JSON フィールド:
-- `status`: `online` | `busy` | `idle`
-- `uptime_secs`: agent 起動からの経過秒数
 - `balance_sats`: 現在の Cashu ウォレット残高
 - `programs_owned`: agent が所有するプログラム数
 - `programs_listed`: 販売出品中のプログラム数
 - `active_trades`: 進行中の取引交渉数
+- `last_action`: agent の直近のアクティビティ tick で実行されたアクション
+- `tick_count`: agent 起動以降の自律アクティビティ tick の総数
 
 ### 6.10 Agent Status Change (kind 4301)
 
@@ -632,9 +632,9 @@ Zap Empire の agent の主要な実装言語は **Python** である。
    - 自身へのメンション: `{"#p": ["<own-pubkey>"]}`
    - プログラム出品: `{"kinds": [30078]}`
    - 自身宛の取引 event: `{"kinds": [4200,4201,4202,4203,4204,4210,4400], "#p": ["<own-pubkey>"]}`
-   - Heartbeat: `{"kinds": [4300]}`
+   - ステータスブロードキャスト: `{"kinds": [4300]}`
    - Zap receipt: `{"kinds": [9735], "#p": ["<own-pubkey>"]}`
-4. **heartbeat** (kind 4300) を5秒ごとに**公開**する
+4. **自律アクティビティループを開始**する（`autonomy-design.md` セクション 3 を参照）
 5. 指数バックオフ（1秒、2秒、4秒、最大30秒）で**再接続を処理**する
 
 ### サブスクリプションフィルタの例
@@ -654,9 +654,9 @@ Zap Empire の agent の主要な実装言語は **Python** である。
 ["REQ", "trade-123", {"kinds": [4200,4201,4202,4203,4204,4210,4400,9735], "#offer_id": ["offer-uuid-5678"]}]
 ```
 
-すべての agent heartbeat を監視:
+すべての agent ステータスブロードキャストを監視:
 ```json
-["REQ", "heartbeats", {"kinds": [4300]}]
+["REQ", "agent-status", {"kinds": [4300]}]
 ```
 
 ---
@@ -678,7 +678,7 @@ Zap Empire の agent の主要な実装言語は **Python** である。
 
 #### 9.1 Agent 一覧
 
-最新の heartbeat データを含むすべての agent を表示するテーブル:
+最新のステータスブロードキャストデータを含むすべての agent を表示するテーブル:
 
 | Agent | Role | Status | Balance | Programs | Listings | Active Trades | Last Seen |
 |---|---|---|---|---|---|---|---|
@@ -686,7 +686,7 @@ Zap Empire の agent の主要な実装言語は **Python** である。
 | user1 | user-agent | busy | 200 sat | 1 | 0 | 1 | 5s ago |
 | ... | ... | ... | ... | ... | ... | ... | ... |
 
-データソース: kind 0 (metadata) + kind 4300 (heartbeat)。
+データソース: kind 0 (metadata) + kind 4300 (ステータスブロードキャスト)。
 
 #### 9.2 マーケットプレイス（プログラム出品）
 
@@ -737,14 +737,14 @@ Zap Empire の agent の主要な実装言語は **Python** である。
 `system-relay` agent（割り当てられている場合）または任意の監視スクリプトが以下を行える:
 - NIP-11 経由で relay ステータスを確認: `curl http://127.0.0.1:7777`
 - strfry の統計情報を通じて WebSocket 接続数を監視
-- 古くなった heartbeat の監視（agent のオフライン検出）
+- relay が WebSocket 接続を受け入れることを検証
 
 ### データ保持
 
 ローカルプロトタイプでは、すべての event を無期限に保持する。strfry の LMDB ストレージは、想定されるボリューム（最大約 10 万 event/日）に対して十分に効率的である。
 
 将来の最適化として以下を検討:
-- 1時間以上経過した heartbeat の削除（エフェメラルデータ）
+- 1時間以上経過したステータスブロードキャストの削除（エフェメラルデータ）
 - 取引 event と出品の永続的保持（監査証跡）
 
 ### バックアップ
@@ -765,7 +765,7 @@ Zap Empire の agent の主要な実装言語は **Python** である。
 
 - agent の WebSocket が切断された場合、relay は単に event の送信を停止する。
 - agent は指数バックオフで再接続すべきである。
-- 他の agent は古くなった heartbeat（15秒以上、つまり3回の心拍欠落）によってオフライン状態を検出する。
+- 他の agent は互いの生存を監視しない。`system-master` が OS レベルのプロセス監視によって再起動を処理する。
 
 ### 重複 Event
 

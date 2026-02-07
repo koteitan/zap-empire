@@ -3,7 +3,7 @@
 ## 1. Overview
 
 The Nostr relay is the communication backbone of Zap Empire. All agent-to-agent
-messaging, program listings, trade negotiations, heartbeats, and zap
+messaging, program listings, trade negotiations, status broadcasts, and zap
 notifications flow through a single local relay running on WSL2. Human operators
 observe the system through a lightweight client app connected to the same relay.
 
@@ -226,7 +226,7 @@ with standard Nostr kinds.
 | **4221** | Escrow Release | No | Buyer confirms, escrow releases funds to seller |
 | **4222** | Escrow Dispute | No | Buyer disputes trade, escrow holds funds |
 | **4223** | Escrow Timeout | No | Escrow auto-releases funds after timeout |
-| **4300** | Agent Heartbeat | No | Periodic alive signal with status (every 5s) |
+| **4300** | Agent Status Broadcast | No | Periodic status report for dashboard (~every 5 min) |
 | **4301** | Agent Status Change | No | Agent going offline, online, busy |
 | **4400** | Trade Receipt | No | Published by buyer after successful trade (public audit trail) |
 | **9735** | Zap Receipt | No | Cashu payment confirmation (NIP-57) |
@@ -241,7 +241,7 @@ with standard Nostr kinds.
   replace each other.
 - **4204, 4210**: These kinds carry sensitive content (bearer Cashu tokens,
   program source code) and MUST use NIP-04 or NIP-44 encryption.
-- **4300-4301**: Agent lifecycle events (heartbeats, status changes).
+- **4300-4301**: Agent lifecycle events (status broadcasts, status changes).
 - **4400**: Trade receipts for public audit trail.
 
 ---
@@ -443,9 +443,9 @@ This follows NIP-57 structure, adapted for Cashu instead of Lightning:
 - `P` (uppercase) is the sender
 - `p` (lowercase) is the recipient
 
-### 6.9 Agent Heartbeat (kind 4300)
+### 6.9 Agent Status Broadcast (kind 4300)
 
-Published periodically (every 5 seconds) by each agent to signal liveness.
+Published periodically (~every 5 minutes) by each user agent for dashboard observability. **Not used for health monitoring** — process liveness is tracked via OS-level child process exit detection in `system-master`.
 
 ```json
 {
@@ -455,17 +455,17 @@ Published periodically (every 5 seconds) by each agent to signal liveness.
     ["agent_name", "user0"],
     ["role", "user-agent"]
   ],
-  "content": "{\"status\":\"online\",\"uptime_secs\":3600,\"balance_sats\":500,\"programs_owned\":3,\"programs_listed\":1,\"active_trades\":0}"
+  "content": "{\"balance_sats\":500,\"programs_owned\":3,\"programs_listed\":1,\"active_trades\":0,\"last_action\":\"browse_marketplace\",\"tick_count\":42}"
 }
 ```
 
 Content JSON fields:
-- `status`: `online` | `busy` | `idle`
-- `uptime_secs`: seconds since agent started
 - `balance_sats`: current Cashu wallet balance
 - `programs_owned`: number of programs the agent has
 - `programs_listed`: number of programs listed for sale
 - `active_trades`: number of in-flight trade negotiations
+- `last_action`: the action taken on the agent's most recent activity tick
+- `tick_count`: total autonomous activity ticks since agent started
 
 ### 6.10 Agent Status Change (kind 4301)
 
@@ -651,9 +651,9 @@ Each agent should:
    - Own mentions: `{"#p": ["<own-pubkey>"]}`
    - Program listings: `{"kinds": [30078]}`
    - Trade events directed at self: `{"kinds": [4200,4201,4202,4203,4204,4210,4400], "#p": ["<own-pubkey>"]}`
-   - Heartbeats: `{"kinds": [4300]}`
+   - Status broadcasts: `{"kinds": [4300]}`
    - Zap receipts: `{"kinds": [9735], "#p": ["<own-pubkey>"]}`
-4. **Publish heartbeat** (kind 4300) every 5 seconds
+4. **Start autonomous activity loop** (see `autonomy-design.md` Section 3)
 5. **Handle reconnection** with exponential backoff (1s, 2s, 4s, max 30s)
 
 ### Subscription Filter Examples
@@ -673,9 +673,9 @@ Track a specific trade thread:
 ["REQ", "trade-123", {"kinds": [4200,4201,4202,4203,4204,4210,4400,9735], "#offer_id": ["offer-uuid-5678"]}]
 ```
 
-Monitor all agent heartbeats:
+Monitor all agent status broadcasts:
 ```json
-["REQ", "heartbeats", {"kinds": [4300]}]
+["REQ", "agent-status", {"kinds": [4300]}]
 ```
 
 ---
@@ -698,7 +698,7 @@ relay via WebSocket and provides a real-time view of the agent economy.
 
 #### 9.1 Agent Overview
 
-A table showing all agents with their latest heartbeat data:
+A table showing all agents with their latest status broadcast data:
 
 | Agent | Role | Status | Balance | Programs | Listings | Active Trades | Last Seen |
 |---|---|---|---|---|---|---|---|
@@ -706,7 +706,7 @@ A table showing all agents with their latest heartbeat data:
 | user1 | user-agent | busy | 200 sat | 1 | 0 | 1 | 5s ago |
 | ... | ... | ... | ... | ... | ... | ... | ... |
 
-Data source: kind 0 (metadata) + kind 4300 (heartbeats).
+Data source: kind 0 (metadata) + kind 4300 (status broadcasts).
 
 #### 9.2 Marketplace (Program Listings)
 
@@ -757,7 +757,7 @@ A scrolling log of all raw Nostr events for debugging:
 The `system-relay` agent (if assigned) or any monitoring script can:
 - Check relay status via NIP-11: `curl http://127.0.0.1:7777`
 - Monitor WebSocket connection count via strfry's stats
-- Watch for stale heartbeats (agent offline detection)
+- Verify relay accepts WebSocket connections
 
 ### Data Retention
 
@@ -765,7 +765,7 @@ For the local prototype, retain all events indefinitely. strfry's LMDB storage
 is efficient enough for the expected volume (~100k events/day max).
 
 For later optimization, consider:
-- Purging heartbeats older than 1 hour (ephemeral data)
+- Purging status broadcasts older than 1 hour (ephemeral data)
 - Keeping trade events and listings permanently (audit trail)
 
 ### Backup
@@ -786,7 +786,7 @@ For later optimization, consider:
 
 - If an agent's WebSocket drops, the relay just stops sending events.
 - The agent should reconnect with exponential backoff.
-- Other agents detect offline status via stale heartbeats (no heartbeat for >15s, i.e. 3 missed beats).
+- Other agents do not monitor each other's liveness; `system-master` handles restarts via OS-level process monitoring.
 
 ### Duplicate Events
 

@@ -370,7 +370,7 @@ kind `4220`はCashu bearerトークンを含むため暗号化が必要です（
 
 | Kind | 名称 | 置換可能? | 暗号化 | 説明 |
 |---|---|---|---|---|
-| `4300` | Agent Heartbeat | いいえ | 公開 | 定期的なヘルス/ステータスシグナル（5秒ごと） |
+| `4300` | Agent Status Broadcast | いいえ | 公開 | ダッシュボード向けの定期的なステータスレポート（約5分ごと）; ヘルス監視用ではない |
 | `4301` | Agent Status Change | いいえ | 公開 | agentの状態遷移アナウンス |
 
 ### 廃止/削除されたKind
@@ -476,22 +476,24 @@ LISTED ──> OFFERED ──> ACCEPTED ──> PAID ──> DELIVERED ──> C
 | ISSUE-9: Kind 30078の多重使用 | 中程度 | 目的ごとに個別kind; `30079`を廃止 | nostr-design, zap-design |
 | ISSUE-10: Escrow event kind | 新規 | kind `4220-4223`を追加 | nostr-design, zap-design |
 | ISSUE-11: Relay/Mint URL | 軽微 | 共有`config/constants.json` | autonomy-design |
-| ISSUE-12: 技術スタック | 軽微 | Mint=Python, Agent=Node.js, HTTP REST経由通信 | zap-design, nostr-design |
+| ISSUE-12: 技術スタック | 軽微 | Mint=Python, Agent=全体をPythonで統一 | zap-design, nostr-design |
+| ISSUE-13: Heartbeat再設計 | 重大 | Heartbeatはヘルスチェックではない; 自律的アクティビティループ（約60秒ティック）として再設計。Kind 4300はダッシュボード専用のステータスブロードキャスト（約5分）に用途変更。UNHEALTHY状態を廃止。プロセス監視はOSレベルのwaitpidのみで実施。 | autonomy-design, nostr-design, user-agent-design |
 
 ---
 
 ## アクションアイテム
 
 ### system-autonomy (autonomy-design.md)
-1. heartbeat kindを`30078`から`4300`に更新（セクション3.1、3.2）
-2. heartbeatペイロードスキーマを統合（セクション3.2）
+1. ~~heartbeat kindを`30078`から`4300`に更新~~ 完了
+2. ~~heartbeatペイロードスキーマを統合~~ 完了
 3. relay URL `ws://127.0.0.1:7777`およびmint URL `http://127.0.0.1:3338`を追加（セクション8.4）
 4. agentインベントリを更新: agentを正規名称にリネーム、`system-cashu`と`system-escrow`を追加、合計を15に更新（セクション1.1）
 5. フェーズ2（システムagent）を起動順序に追加（セクション2.3）
 6. 共有設定に`config/constants.json`を参照
+7. **ISSUE-13**: heartbeatを自律的アクティビティループ（約60秒ティック）に再設計。UNHEALTHY状態を廃止、ヘルスチェックループを廃止、アクティビティ選択ロジックを追加。完了
 
 ### system-nostr (nostr-design.md)
-1. heartbeat間隔を30秒から5秒に更新（セクション6.8、8）
+1. ~~heartbeat間隔を30秒から5秒に更新~~ → **ISSUE-13**: Kind 4300をステータスブロードキャスト（約5分）に用途変更。完了
 2. event kindテーブルからkind `30079`を削除（セクション5）
 3. kind `4204`（Trade Payment、暗号化）をevent kindテーブルに追加
 4. kind `4210`（Program Delivery）を暗号化として明記

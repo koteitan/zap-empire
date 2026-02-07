@@ -297,8 +297,8 @@ Shared constants (`config/constants.json`):
   "mint_url": "http://127.0.0.1:3338",
   "relay_port": 7777,
   "mint_port": 3338,
-  "heartbeat_interval_ms": 5000,
-  "heartbeat_timeout_ms": 15000,
+  "tick_interval_s": 60,
+  "status_broadcast_every_n_ticks": 5,
   "startup_timeout_ms": 30000
 }
 ```
@@ -370,7 +370,7 @@ This is the single source of truth for all Nostr event kinds in Zap Empire.
 
 | Kind | Name | Replaceable? | Encryption | Description |
 |---|---|---|---|---|
-| `4300` | Agent Heartbeat | No | Public | Periodic health/status signal (every 5s) |
+| `4300` | Agent Status Broadcast | No | Public | Periodic status report for dashboard (~every 5 min); NOT for health monitoring |
 | `4301` | Agent Status Change | No | Public | Agent state transition announcement |
 
 ### Retired/Removed Kinds
@@ -476,22 +476,24 @@ LISTED ──> OFFERED ──> ACCEPTED ──> PAID ──> DELIVERED ──> C
 | ISSUE-9: Kind 30078 overloaded | MODERATE | Distinct kinds per purpose; remove `30079` | nostr-design, zap-design |
 | ISSUE-10: Escrow event kinds | NEW | Add kinds `4220-4223` | nostr-design, zap-design |
 | ISSUE-11: Relay/Mint URLs | MINOR | Shared `config/constants.json` | autonomy-design |
-| ISSUE-12: Tech stack | MINOR | Mint=Python, Agents=Node.js, comm via HTTP REST | zap-design, nostr-design |
+| ISSUE-12: Tech stack | MINOR | Mint=Python, Agents=Python throughout | zap-design, nostr-design |
+| ISSUE-13: Heartbeat redesign | CRITICAL | Heartbeat is NOT health-check; redesigned as autonomous activity loop (~60s tick). Kind 4300 repurposed as status broadcast (~5 min) for dashboard only. No UNHEALTHY state. Process monitoring via OS-level waitpid only. | autonomy-design, nostr-design, user-agent-design |
 
 ---
 
 ## Action Items
 
 ### system-autonomy (autonomy-design.md)
-1. Update heartbeat kind from `30078` to `4300` (Sections 3.1, 3.2)
-2. Merge heartbeat payload schema (Section 3.2)
+1. ~~Update heartbeat kind from `30078` to `4300`~~ ✓ Done
+2. ~~Merge heartbeat payload schema~~ ✓ Done
 3. Add relay URL `ws://127.0.0.1:7777` and mint URL `http://127.0.0.1:3338` (Section 8.4)
 4. Update agent inventory: rename agents to canonical names, add `system-cashu` and `system-escrow`, update total to 15 (Section 1.1)
 5. Add Phase 2 (system agents) to spawn order (Section 2.3)
 6. Reference `config/constants.json` for shared configuration
+7. **ISSUE-13**: Redesigned heartbeat → autonomous activity loop (~60s tick). Removed UNHEALTHY state, removed health-check loop, added activity selection logic. ✓ Done
 
 ### system-nostr (nostr-design.md)
-1. Update heartbeat interval from 30s to 5s (Sections 6.8, 8)
+1. ~~Update heartbeat interval from 30s to 5s~~ → **ISSUE-13**: Kind 4300 repurposed as status broadcast (~5 min). ✓ Done
 2. Remove kind `30079` from event kinds table (Section 5)
 3. Add kind `4204` (Trade Payment, encrypted) to event kinds table
 4. Mark kind `4210` (Program Delivery) as encrypted

@@ -21,7 +21,7 @@
 
 ### 2.1 技術選定: カスタムプロセスマネージャー
 
-systemd（root 権限が必要で WSL2 のセットアップを複雑にする）や `supervisord` のようなサードパーティの supervisor を使う代わりに、Zap Empire ではプロジェクトの主要言語で書かれた**カスタム軽量プロセスマネージャー**を使用する。これにより、外部依存なしにライフサイクル、heartbeat のセマンティクス、agent 間メッセージングを完全に制御できる。
+systemd（root 権限が必要で WSL2 のセットアップを複雑にする）や `supervisord` のようなサードパーティの supervisor を使う代わりに、Zap Empire ではプロジェクトの主要言語で書かれた**カスタム軽量プロセスマネージャー**を使用する。これにより、外部依存なしにライフサイクル、自律的なアクティビティループ、agent 間メッセージングを完全に制御できる。
 
 プロセスマネージャーは `system-master` に組み込まれている。
 
@@ -54,66 +54,94 @@ systemd（root 権限が必要で WSL2 のセットアップを複雑にする�
 agent は**依存順序**に従って起動される:
 
 1. **フェーズ 1 -- インフラ**: `nostr-relay`、`cashu-mint`
-2. **フェーズ 2 -- ユーザー**: `user0` から `user9`（フェーズ 1 の agent が正常な heartbeat を報告した後に並列起動可能）
+2. **フェーズ 2 -- ユーザー**: `user0` から `user9`（フェーズ 1 の agent が正常と報告された後に並列起動可能）
 
-`system-master` はフェーズ 2 に進む前に、フェーズ 1 の agent が最初の成功した heartbeat を発信するのを待つ。
+`system-master` はフェーズ 2 に進む前に、フェーズ 1 の agent が準備完了を通知する（relay が WebSocket 接続を受け付け、mint がヘルスエンドポイントに応答する）のを待つ。
 
 ---
 
-## 3. Heartbeat メカニズム
+## 3. 自律アクティビティループ
 
-### 3.1 設計
+### 3.1 コンセプト
 
-管理対象のすべての agent は、定期的に `system-master` へ **heartbeat メッセージ**を送信する。heartbeat はプロジェクト独自の Nostr relay をトランスポート層として使用し、agent 間通信と一貫した設計を保つ。
+各 user agent は内部で**アクティビティループ**を実行する。これは自律的な経済行動を駆動する定期的なティックである。agent に保留中のタスク（受信オファー、完了すべき取引など）がない場合、ティックは自律的なアクションを選択して実行する。
+
+これは Zap Empire 経済の「心臓の鼓動」である。ヘルスシグナルではなく、**自律的活動のパルス**である。
+
+### 3.2 ティックの設定
 
 | パラメータ | 値 |
 |---|---|
-| heartbeat 間隔 | **5 秒** |
-| heartbeat タイムアウト（dead 判定閾値） | **15 秒**（3 回分の未着） |
-| heartbeat Nostr event kind | `4300`（regular event） |
-| heartbeat tags | `["agent_name", "<id>"]`、`["role", "<role>"]` |
+| デフォルトのティック間隔 | **60 秒** |
+| 設定可能範囲 | 30〜300 秒 |
+| agent ごとのオーバーライド | agent マニフェスト内の `tick_interval` フィールド |
+| Nostr ステータスブロードキャスト kind | `4300`（情報提供用、ヘルスチェック用ではない） |
+| ステータスブロードキャスト頻度 | 5 ティックごと（約 5 分） |
 
-### 3.2 Heartbeat ペイロード
+間隔が意図的に長い（1 分）のは以下の理由による:
+- アクションには実際の Nostr event と Cashu トランザクションが伴う
+- マーケットプレイスには自然な価格発見のためにアクション間の時間が必要
+- システム負荷が低く、ログが読みやすくなる
 
-各 heartbeat はローカル relay に publish される Nostr event である:
+### 3.3 アクティビティの選択
+
+各ティックで、agent は優先度順の意思決定プロセスを実行する:
+
+| 優先度 | 条件 | アクション |
+|---|---|---|
+| 1 | 保留中の取引メッセージ（オファー/承諾/支払い） | 取引に応答する |
+| 2 | マーケットプレイスに予算内の魅力的なプログラムがある | 閲覧して購入を検討する |
+| 3 | インベントリのプログラム数が N 個未満 | 新しいプログラムを生成する |
+| 4 | 出品中のプログラムが最近売れていない | 価格を調整する |
+| 5 | ポートフォリオレビューの間隔に達した | パフォーマンスを分析し戦略を更新する |
+| 6 | 上記のいずれにも該当しない | アイドル（ログ出力、次のティックを待つ） |
+
+具体的な意思決定ロジックとパーソナリティに基づくバリエーションは [User Agent 設計](./user-agent-design.md) で定義されている。
+
+### 3.4 アクティビティループの疑似コード
+
+```python
+async def activity_loop(agent):
+    while agent.running:
+        # 1. Check for and handle pending trade messages
+        pending = await agent.nostr.fetch_pending_events()
+        if pending:
+            await agent.trade_engine.process(pending)
+        else:
+            # 2. Autonomous action selection
+            action = agent.strategy.select_action(agent.state)
+            await agent.execute(action)
+
+        # 3. Publish status for dashboard (every N ticks)
+        if agent.tick_count % STATUS_BROADCAST_INTERVAL == 0:
+            await agent.publish_status()
+
+        agent.tick_count += 1
+        await asyncio.sleep(agent.tick_interval)
+```
+
+### 3.5 Agent マニフェストの拡張
 
 ```json
 {
-  "kind": 4300,
-  "tags": [
-    ["agent_name", "user3"],
-    ["role", "user-agent"]
-  ],
-  "content": "{\"status\":\"healthy\",\"uptime_secs\":3621,\"mem_mb\":42,\"balance_sats\":500,\"programs_owned\":3,\"programs_listed\":1,\"active_trades\":0,\"ts\":1700000000}"
+  "agents": [
+    { "id": "user0", "cmd": "python", "args": ["src/user/main.py", "0"],
+      "restart": "on-failure", "tick_interval": 60 },
+    { "id": "user1", "cmd": "python", "args": ["src/user/main.py", "1"],
+      "restart": "on-failure", "tick_interval": 45 }
+  ]
 }
 ```
 
-`content` 内のフィールド:
+agent ごとに異なるティック間隔を設定することで、マーケット活動に自然なばらつきが生まれる。
 
-| フィールド | 型 | 説明 |
-|---|---|---|
-| `status` | string | `healthy`、`degraded`、または `shutting-down` |
-| `uptime_secs` | int | agent 起動からの経過秒数 |
-| `mem_mb` | int | 常駐メモリ（MB） |
-| `balance_sats` | int | 現在の Cashu wallet 残高（sats） |
-| `programs_owned` | int | agent が保有するプログラム数 |
-| `programs_listed` | int | 売りに出されているプログラム数 |
-| `active_trades` | int | 進行中の取引交渉の数 |
-| `ts` | int | heartbeat の Unix タイムスタンプ |
+### 3.6 インフラ Agent
 
-### 3.3 フォールバック: パイプベースの Heartbeat
-
-Nostr relay 自体が監視対象の agent である場合（鶏と卵の問題）、`system-master` は**セカンダリチャネル**を通じて `nostr-relay` を監視する:
-
-- `nostr-relay` は 5 秒ごとに `stdout` に heartbeat 行を書き込む。
-- `system-master` は子プロセスのパイプを直接読み取る。
-- 形式: `HEARTBEAT <unix_timestamp> <status>`
-
-これにより、relay が利用不可能な場合でも（あるいは利用可能になる前でも）`nostr-relay` の健全性が追跡される。
+インフラ agent（`nostr-relay`、`cashu-mint`）はアクティビティループを**実行しない**。これらはリクエストに応答するサーバーである。その生存確認は OS レベルの子プロセス終了検出（セクション 5.3）のみで行われ、heartbeat は使用しない。
 
 ---
 
-## 4. ヘルスモニタリング
+## 4. Agent の状態とプロセス監視
 
 ### 4.1 Agent の状態
 
@@ -123,23 +151,21 @@ Nostr relay 自体が監視対象の agent である場合（鶏と卵の問題�
          spawn
   [STOPPED] ──────> [STARTING]
       ^                  │
-      │           first heartbeat
+      │           initialization
+      │            complete
       │                  v
       │             [RUNNING]
-      │            /         \
-      │    heartbeat          timeout / crash
-      │    received            detected
-      │        │                  │
-      │        v                  v
-      │    [RUNNING]         [UNHEALTHY]
-      │                          │
-      │                   restart policy
-      │                   applied
-      │                  /          \
-      │          restart=yes     restart=no
-      │              │                │
-      │              v                v
-      └──────── [STARTING]      [STOPPED]
+      │                  │
+      │            process exit
+      │             detected
+      │                  │
+      │           restart policy
+      │              applied
+      │            /          \
+      │     restart=yes    restart=no
+      │         │               │
+      │         v               v
+      └──── [STARTING]     [STOPPED]
 ```
 
 状態:
@@ -147,33 +173,63 @@ Nostr relay 自体が監視対象の agent である場合（鶏と卵の問題�
 | 状態 | 説明 |
 |---|---|
 | `STOPPED` | 実行中でない。PID なし |
-| `STARTING` | プロセスは起動済み。最初の heartbeat を待機中 |
-| `RUNNING` | 正常。heartbeat が時間通りに到着している |
-| `UNHEALTHY` | タイムアウト閾値を超えて heartbeat が未着 |
+| `STARTING` | プロセスは起動済み。初期化の完了を待機中 |
+| `RUNNING` | プロセス生存中。アクティビティループがアクティブ（user agent）、またはリクエストを処理中（インフラ） |
 
-### 4.2 ヘルスチェックループ
+`UNHEALTHY` 状態は存在しない。プロセスが終了した場合、ポリシーに基づいて即座にリスタートまたは停止される。
 
-`system-master` は **5 秒**ごとにヘルスチェックループを実行する:
+### 4.2 プロセス監視
 
-1. 各 agent について `time_since_last_heartbeat` を計算する。
-2. `>= 15s` かつ状態が `RUNNING` の場合、`UNHEALTHY` に遷移する。
-3. `UNHEALTHY` の場合、その agent のリスタートポリシーを適用する（セクション 5 参照）。
-4. `STARTING` 状態の agent に heartbeat が到着した場合、`RUNNING` に遷移する。
-5. すべての状態遷移を `logs/system-master/state.log` に記録する。
+`system-master` は **OS レベルの子プロセスハンドリングのみ**で agent を監視する:
 
-### 4.3 システムダッシュボード（オプション、フェーズ 2）
+- `waitpid` / プロセスハンドルコールバックを通じて子プロセスの終了を検出する。
+- 予期しない終了時 → リスタートポリシーを適用する（セクション 5）。
+- heartbeat ベースのヘルスチェックなし。ポーリングなし。タイムアウトなし。
+
+これはシンプルで信頼性が高い。プロセスが実行中であれば、それは生きている。
+
+### 4.3 ステータスブロードキャスト（オブザーバビリティ）
+
+user agent はオプションで約 5 分ごとに**ステータス event**（kind `4300`）を publish し、ダッシュボード表示に使用する:
+
+```json
+{
+  "kind": 4300,
+  "tags": [
+    ["agent_name", "user3"],
+    ["role", "user-agent"]
+  ],
+  "content": "{\"balance_sats\":500,\"programs_owned\":3,\"programs_listed\":1,\"active_trades\":0,\"last_action\":\"browse_marketplace\",\"tick_count\":42,\"ts\":1700000000}"
+}
+```
+
+`content` 内のフィールド:
+
+| フィールド | 型 | 説明 |
+|---|---|---|
+| `balance_sats` | int | 現在の Cashu wallet 残高（sats） |
+| `programs_owned` | int | agent が保有するプログラム数 |
+| `programs_listed` | int | 売りに出されているプログラム数 |
+| `active_trades` | int | 進行中の取引交渉の数 |
+| `last_action` | string | 直前のティックで agent が実行したアクション |
+| `tick_count` | int | agent 起動以降の合計ティック数 |
+| `ts` | int | Unix タイムスタンプ |
+
+**重要**: これらのステータス event は純粋にダッシュボード用の情報提供目的である。`system-master` はこれらを参照したり、これらに基づいて行動することは**ない**。
+
+### 4.4 システムダッシュボード
 
 agent の状態テーブルを表示するシンプルなステータスエンドポイントまたは CLI コマンド:
 
 ```
-Agent         State      Last Beat   Uptime    Restarts
-───────────── ────────── ─────────── ───────── ────────
-nostr-relay   RUNNING    2s ago      1h 23m    0
-cashu-mint    RUNNING    1s ago      1h 23m    0
-user0         RUNNING    3s ago      1h 22m    1
-user1         UNHEALTHY  18s ago     0h 04m    3
+Agent         State      PID     Uptime    Restarts  Last Action
+───────────── ────────── ─────── ───────── ───────── ──────────────────
+nostr-relay   RUNNING    12345   1h 23m    0         (server)
+cashu-mint    RUNNING    12346   1h 23m    0         (server)
+user0         RUNNING    12350   1h 22m    1         generate_program
+user1         RUNNING    12351   0h 04m    3         browse_marketplace
 ...
-user9         RUNNING    0s ago      1h 22m    0
+user9         RUNNING    12359   1h 22m    0         idle
 ```
 
 ---
@@ -185,13 +241,13 @@ user9         RUNNING    0s ago      1h 22m    0
 1. `system-master` が agent マニフェストを読み込む。
 2. agent プロセスを起動し、状態を `STARTING` にする。
 3. **30 秒**の**起動タイムアウト**を開始する。
-4. タイムアウト内に agent が最初の heartbeat を送信すれば、状態は `RUNNING` になる。
-5. heartbeat なくタイムアウトが満了した場合、状態は `UNHEALTHY` になり、リスタートポリシーが適用される。
+4. タイムアウト内に agent が初期化を完了すれば（relay への接続、wallet の読み込み）、状態は `RUNNING` になる。
+5. タイムアウトが満了した場合、リスタートポリシーが適用される。
 
 ### 5.2 グレースフル停止
 
 1. `system-master` が agent プロセスに `SIGTERM` を送信する。
-2. agent はシグナルを受信し、`status: "shutting-down"` の最終 heartbeat を publish し、クリーンアップを実行してから終了コード 0 で終了する。
+2. agent はシグナルを受信し、進行中の取引を完了させ、状態をディスクに永続化してから終了コード 0 で終了する。
 3. `system-master` はプロセスの終了を最大 **10 秒**待つ。
 4. プロセスが終了しない場合、`system-master` は `SIGKILL` を送信する。
 5. 状態が `STOPPED` になる。
@@ -203,9 +259,8 @@ user9         RUNNING    0s ago      1h 22m    0
 - `system-master` が子プロセスハンドルの `exit` イベントを受信した場合。
 
 クラッシュ時:
-1. 状態が `UNHEALTHY` に遷移する。
-2. 終了コード/シグナル、タイムスタンプ、agent の stderr の最後 50 行がログに記録される。
-3. リスタートポリシーが直ちに適用される。
+1. 終了コード/シグナル、タイムスタンプ、agent の stderr の最後 50 行がログに記録される。
+2. リスタートポリシーが直ちに適用される。
 
 ### 5.4 リスタートポリシー
 
@@ -295,7 +350,7 @@ system-master (root supervisor)
 
 1. リスタート時、`system-master` は起動したすべての子プロセスの PID を記録した `data/system-master/pids.json` を読み込む。
 2. 記録された各 PID について、プロセスがまだ生存しているか確認する（`kill -0 <pid>`）。
-3. 生存している場合、監視を再接続する（heartbeat の再購読、relay の stdout パイプの再接続）。
+3. 生存している場合、監視を再接続する（子プロセスハンドルの再登録）。
 4. 停止している場合、リスタートポリシーを適用する。
 
 これにより、`system-master` はすべての agent をリスタートせずに復旧できる。
@@ -311,8 +366,8 @@ system-master (root supervisor)
 ### 8.1 現在の規模
 
 - 10 user agent + 3 system プロセス = 合計 13 プロセス。
-- heartbeat トラフィック: 5 秒ごとに 13 イベント = ローカル relay 上で約 2.6 イベント/秒。
-- これはどの Nostr relay 実装でも容易に処理できる。
+- ステータスブロードキャスト: 13 agent x 約 5 分に 1 イベント = relay 負荷は無視できる程度。
+- 取引アクティビティ: アクティブな取引時、user agent あたり約 1〜2 Nostr event/分。
 
 ### 8.2 10 ユーザー超へのスケーリング
 
@@ -329,7 +384,7 @@ system-master (root supervisor)
 | リソース | 制限値 | メカニズム |
 |---|---|---|
 | メモリ | user agent あたり 256 MB | `resource.setrlimit()`（Python）または cgroup |
-| CPU | ハードリミットなし（WSL2 はホスト CPU を共有） | heartbeat の `cpu_pct` フィールドで監視 |
+| CPU | ハードリミットなし（WSL2 はホスト CPU を共有） | ステータスブロードキャストまたは `ps` で監視 |
 | ファイルディスクリプタ | agent あたり 1024 | `ulimit -n` |
 | ディスク（ログ） | agent あたり 50 MB | ログローテーション（5 ファイル x 10 MB を保持） |
 
@@ -407,8 +462,8 @@ logs/
 | 判断 | 根拠 |
 |---|---|
 | systemd ではなくカスタムプロセスマネージャー | root 権限の要件を回避。すべての WSL2 環境で動作。Nostr とのより緊密な統合 |
-| Nostr ベースの heartbeat | 既存インフラの再利用。heartbeat は任意の relay 購読者が観測可能 |
-| relay 監視のパイプフォールバック | relay を relay 経由で監視するという鶏と卵の問題を解決 |
+| 自律アクティビティループ（約 60 秒ティック） | agent がアイドル時に経済行動（作成・閲覧・取引）を自律的に実行する |
+| OS レベルのプロセス監視のみ | シンプルな `waitpid` ベースのクラッシュ検出。heartbeat ポーリング不要 |
 | フラットな監視ツリー | 13 agent は少数。早すぎる抽象化よりもシンプルさを優先 |
 | リスタート時の指数バックオフ | クラッシュループによるリソース消費を防止 |
 | 復旧用の JSON 状態ファイル | シンプルで人間が読め、データベース依存なし |

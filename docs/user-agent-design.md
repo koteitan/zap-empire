@@ -23,7 +23,7 @@ User agents operate without human intervention. They make autonomous decisions a
 
 | Subsystem | Document | Interaction |
 |---|---|---|
-| Process management | `autonomy-design.md` | `system-master` spawns/monitors user agents; heartbeat (kind 4300, 5s) |
+| Process management | `autonomy-design.md` | `system-master` spawns/monitors user agents; autonomous activity loop (~60s tick) |
 | Nostr relay | `nostr-design.md` | All agent communication flows through `ws://127.0.0.1:7777` |
 | Payment system | `zap-design.md` | Cashu wallet via Nutshell (`cashu.wallet`), mint at `http://127.0.0.1:3338` |
 | Canonical decisions | `review-notes.md` | Authoritative resolutions for all cross-document conflicts |
@@ -49,7 +49,7 @@ User agents operate without human intervention. They make autonomous decisions a
 │         │                 │                    │                │
 │  ┌──────┴─────────────────┴────────────────────┴───────────┐   │
 │  │                    Core Event Loop                       │   │
-│  │  - heartbeat ticker (kind 4300, every 5s)                │   │
+│  │  - autonomous activity tick (~60s)                        │   │
 │  │  - event dispatcher                                      │   │
 │  │  - state persistence (every 30s)                         │   │
 │  └──────┬─────────────────┬────────────────────┬───────────┘   │
@@ -88,7 +88,7 @@ User agents operate without human intervention. They make autonomous decisions a
 | **Marketplace Scanner** | Subscribes to kind 30078 listings; filters and evaluates programs by category, price, and description |
 | **Trade Engine** | Manages the full trade state machine (4200→4201→4204→9735→4210→4203); handles timeouts and error recovery |
 | **Strategy Engine** | Determines agent personality, pricing decisions, buy/sell thresholds, and trust scoring |
-| **Core Event Loop** | Coordinates all modules; dispatches incoming events; runs heartbeat ticker; persists state |
+| **Core Event Loop** | Coordinates all modules; dispatches incoming events; runs autonomous activity tick (~60s); persists state |
 
 ---
 
@@ -805,9 +805,9 @@ Agent Start (spawned by system-master)
     │       kind 4210   — program deliveries directed at self
     │       kind 9735   — zap receipts mentioning self
     │
-    ├── 8. Publish first heartbeat (kind 4300)
+    ├── 8. Publish initial status broadcast (kind 4300)
     │
-    └── 9. Enter main event loop
+    └── 9. Enter autonomous activity loop
 ```
 
 ### 10.2 Main Event Loop
@@ -815,20 +815,19 @@ Agent Start (spawned by system-master)
 The agent runs a single-threaded async event loop using Python's `asyncio`:
 
 ```
-Main Event Loop (runs until SIGTERM)
+Autonomous Activity Loop (runs until SIGTERM)
     │
-    ├── Every 5 seconds:
-    │       Publish heartbeat (kind 4300)
-    │
-    ├── Every 30 seconds:
-    │       Persist state to data/<agent-id>/state.json
-    │
-    ├── Every cycle (~30-180 seconds, personality-dependent):
-    │       ┌── Decision Phase ──────────────────────────┐
+    ├── Every ~60 seconds (tick_interval, configurable):
+    │       ┌── Activity Tick ───────────────────────────┐
     │       │                                            │
-    │       │  1. Check wallet balance                   │
-    │       │  2. Scan marketplace for interesting buys  │
-    │       │  3. Decide: create program, buy, or idle   │
+    │       │  1. Check for pending trade messages       │
+    │       │  2. If pending → process trades            │
+    │       │  3. Else → autonomous action:              │
+    │       │     a. Check wallet balance                │
+    │       │     b. Scan marketplace for buys           │
+    │       │     c. Decide: create program, buy, idle   │
+    │       │                                            │
+    │       │  Publish status broadcast (every 5 ticks)  │
     │       │                                            │
     │       │  If CREATE:                                │
     │       │    Generate program                        │
@@ -843,7 +842,10 @@ Main Event Loop (runs until SIGTERM)
     │       │    Review trust scores                     │
     │       └────────────────────────────────────────────┘
     │
-    ├── On incoming event:
+    ├── Every 30 seconds:
+    │       Persist state to data/<agent-id>/state.json
+    │
+    ├── On incoming event (handled between ticks):
     │       Dispatch to appropriate handler:
     │       - kind 4200: on_trade_offer() (seller path)
     │       - kind 4201: on_trade_accept() (buyer path)
@@ -864,8 +866,7 @@ On receiving `SIGTERM` from `system-master`:
 
 1. **Stop creating new trades** — no new offers or listings
 2. **Wait for in-flight trades** — allow up to 10 seconds for active trades to complete
-3. **Publish final heartbeat** — kind 4300 with `status: "shutting-down"`
-4. **Persist state** — write `state.json` with all current data
+3. **Persist state** — write `state.json` with all current data
 5. **Close WebSocket** — disconnect from relay
 6. **Exit** with code 0
 
@@ -875,9 +876,9 @@ If `SIGKILL` is received (after 10s grace period), the agent is killed immediate
 
 ## 11. Metrics and Observability
 
-### 11.1 Heartbeat Data (Kind 4300)
+### 11.1 Status Broadcast (Kind 4300)
 
-Every 5 seconds, the agent publishes a heartbeat containing metrics for the dashboard:
+Every ~5 minutes (every 5 activity ticks), the agent publishes a status broadcast for the dashboard. This is **purely informational** — not used for health monitoring.
 
 ```json
 {
@@ -886,19 +887,18 @@ Every 5 seconds, the agent publishes a heartbeat containing metrics for the dash
     ["agent_name", "user3"],
     ["role", "user-agent"]
   ],
-  "content": "{\"status\":\"healthy\",\"uptime_secs\":3621,\"mem_mb\":42,\"balance_sats\":500,\"programs_owned\":3,\"programs_listed\":1,\"active_trades\":0,\"ts\":1700000000}"
+  "content": "{\"balance_sats\":500,\"programs_owned\":3,\"programs_listed\":1,\"active_trades\":0,\"last_action\":\"generate_program\",\"tick_count\":42,\"ts\":1700000000}"
 }
 ```
 
 | Field | Type | Source |
 |---|---|---|
-| `status` | string | `healthy` / `degraded` / `shutting-down` |
-| `uptime_secs` | int | Time since agent process started |
-| `mem_mb` | int | Resident memory usage |
 | `balance_sats` | int | Available Cashu wallet balance |
 | `programs_owned` | int | Total programs in local inventory |
 | `programs_listed` | int | Programs currently listed for sale |
 | `active_trades` | int | In-flight trade negotiations |
+| `last_action` | string | Action taken on the most recent tick |
+| `tick_count` | int | Total ticks since agent started |
 | `ts` | int | Unix timestamp |
 
 ### 11.2 Agent State File
@@ -951,7 +951,7 @@ The web dashboard (`nostr-design.md` Section 9) consumes the following from user
 
 | Dashboard View | Data Source |
 |---|---|
-| Agent Overview table | Kind 4300 heartbeats |
+| Agent Overview table | Kind 4300 status broadcasts |
 | Marketplace listings | Kind 30078 events |
 | Trade Activity feed | Kinds 4200, 4201, 4202, 4203, 4204, 4210, 9735 |
 | Agent portfolio | Kind 30078 events filtered by pubkey |
@@ -1065,4 +1065,4 @@ All dependencies are pure Python or have binary wheels. No compilation required 
 | Single-threaded async loop | Simple concurrency model; avoids race conditions; sufficient for 10-agent scale |
 | Subprocess sandboxing | Lightweight, standard library only; prevents generated programs from causing harm |
 | State persistence every 30s | Balances durability with I/O overhead; aligned with `autonomy-design.md` |
-| Kind 4300 heartbeats at 5s | Fast health detection by `system-master`; acceptable relay load (~2.6 events/s total) |
+| Autonomous activity loop (~60s tick) | Agents self-direct when idle (create, browse, trade); status broadcast every ~5 min for dashboard |

@@ -21,7 +21,7 @@ Total: **13 processes** under management.
 
 ### 2.1 Technology Choice: Custom Process Manager
 
-Rather than using systemd (which requires root and complicates WSL2 setups) or a third-party supervisor like `supervisord`, Zap Empire uses a **custom lightweight process manager** written in the project's primary language. This gives us full control over lifecycle, heartbeat semantics, and inter-agent messaging without external dependencies.
+Rather than using systemd (which requires root and complicates WSL2 setups) or a third-party supervisor like `supervisord`, Zap Empire uses a **custom lightweight process manager** written in the project's primary language. This gives us full control over lifecycle, autonomous activity loops, and inter-agent messaging without external dependencies.
 
 The process manager is embedded in `system-master`.
 
@@ -56,64 +56,92 @@ Agents are started in **dependency order**:
 1. **Phase 1 -- Infrastructure**: `nostr-relay`, `cashu-mint`
 2. **Phase 2 -- Users**: `user0` through `user9` (can start in parallel once Phase 1 agents report healthy)
 
-`system-master` waits for Phase 1 agents to emit their first successful heartbeat before proceeding to Phase 2.
+`system-master` waits for Phase 1 agents to signal readiness (relay accepts WebSocket connections; mint responds to health endpoint) before proceeding to Phase 2.
 
 ---
 
-## 3. Heartbeat Mechanism
+## 3. Autonomous Activity Loop
 
-### 3.1 Design
+### 3.1 Concept
 
-Every managed agent periodically sends a **heartbeat message** to `system-master`. Heartbeats use the project's own Nostr relay as the transport layer, keeping the design consistent with inter-agent communication.
+Each user agent runs an internal **activity loop** — a periodic tick that drives autonomous economic behavior. When an agent has no pending tasks (no incoming offers, no trades to complete), the tick selects and executes an autonomous action.
+
+This is the "heartbeat" of the Zap Empire economy: not a health signal, but the **pulse of self-directed activity**.
+
+### 3.2 Tick Configuration
 
 | Parameter | Value |
 |---|---|
-| Heartbeat interval | **5 seconds** |
-| Heartbeat timeout (dead threshold) | **15 seconds** (3 missed beats) |
-| Heartbeat Nostr event kind | `4300` (regular event) |
-| Heartbeat tags | `["agent_name", "<id>"]`, `["role", "<role>"]` |
+| Default tick interval | **60 seconds** |
+| Configurable range | 30–300 seconds |
+| Per-agent override | `tick_interval` field in agent manifest |
+| Nostr status broadcast kind | `4300` (informational, not for health checks) |
+| Status broadcast frequency | Every 5 ticks (~5 minutes) |
 
-### 3.2 Heartbeat Payload
+The interval is deliberately long (1 minute) because:
+- Actions involve real Nostr events and Cashu transactions
+- The marketplace needs time between actions for natural price discovery
+- Lower system load and more readable logs
 
-Each heartbeat is a Nostr event published to the local relay:
+### 3.3 Activity Selection
+
+Each tick, the agent runs through a priority-ordered decision process:
+
+| Priority | Condition | Action |
+|---|---|---|
+| 1 | Pending trade messages (offers/acceptances/payments) | Respond to trade |
+| 2 | Marketplace has attractive programs below budget | Browse & consider purchase |
+| 3 | Fewer than N programs in inventory | Generate a new program |
+| 4 | Listed programs haven't sold recently | Adjust prices |
+| 5 | Portfolio review interval reached | Analyze performance & update strategy |
+| 6 | None of the above | Idle (log, wait for next tick) |
+
+The specific decision logic and personality-based variations are defined in the [User Agent Design](./user-agent-design.md).
+
+### 3.4 Activity Loop Pseudocode
+
+```python
+async def activity_loop(agent):
+    while agent.running:
+        # 1. Check for and handle pending trade messages
+        pending = await agent.nostr.fetch_pending_events()
+        if pending:
+            await agent.trade_engine.process(pending)
+        else:
+            # 2. Autonomous action selection
+            action = agent.strategy.select_action(agent.state)
+            await agent.execute(action)
+
+        # 3. Publish status for dashboard (every N ticks)
+        if agent.tick_count % STATUS_BROADCAST_INTERVAL == 0:
+            await agent.publish_status()
+
+        agent.tick_count += 1
+        await asyncio.sleep(agent.tick_interval)
+```
+
+### 3.5 Agent Manifest Extension
 
 ```json
 {
-  "kind": 4300,
-  "tags": [
-    ["agent_name", "user3"],
-    ["role", "user-agent"]
-  ],
-  "content": "{\"status\":\"healthy\",\"uptime_secs\":3621,\"mem_mb\":42,\"balance_sats\":500,\"programs_owned\":3,\"programs_listed\":1,\"active_trades\":0,\"ts\":1700000000}"
+  "agents": [
+    { "id": "user0", "cmd": "python", "args": ["src/user/main.py", "0"],
+      "restart": "on-failure", "tick_interval": 60 },
+    { "id": "user1", "cmd": "python", "args": ["src/user/main.py", "1"],
+      "restart": "on-failure", "tick_interval": 45 }
+  ]
 }
 ```
 
-Fields in `content`:
+Different tick intervals per agent create natural variation in market activity.
 
-| Field | Type | Description |
-|---|---|---|
-| `status` | string | `healthy`, `degraded`, or `shutting-down` |
-| `uptime_secs` | int | Seconds since agent started |
-| `mem_mb` | int | Resident memory in MB |
-| `balance_sats` | int | Current Cashu wallet balance in sats |
-| `programs_owned` | int | Number of programs the agent has |
-| `programs_listed` | int | Number of programs listed for sale |
-| `active_trades` | int | Number of in-flight trade negotiations |
-| `ts` | int | Unix timestamp of heartbeat |
+### 3.6 Infrastructure Agents
 
-### 3.3 Fallback: Pipe-Based Heartbeat
-
-If the Nostr relay itself is the agent being monitored (chicken-and-egg problem), `system-master` monitors `nostr-relay` via a **secondary channel**:
-
-- `nostr-relay` writes a heartbeat line to its `stdout` every 5 seconds.
-- `system-master` reads the child process pipe directly.
-- Format: `HEARTBEAT <unix_timestamp> <status>`
-
-This ensures `nostr-relay` health is tracked even before (or if) the relay is unavailable.
+Infrastructure agents (`nostr-relay`, `cashu-mint`) do **not** run an activity loop. They are servers that respond to requests. Their liveness is monitored only via OS-level child process exit detection (Section 5.3), not via heartbeats.
 
 ---
 
-## 4. Health Monitoring
+## 4. Agent States & Process Monitoring
 
 ### 4.1 Agent States
 
@@ -123,23 +151,21 @@ This ensures `nostr-relay` health is tracked even before (or if) the relay is un
          spawn
   [STOPPED] ──────> [STARTING]
       ^                  │
-      │           first heartbeat
+      │           initialization
+      │            complete
       │                  v
       │             [RUNNING]
-      │            /         \
-      │    heartbeat          timeout / crash
-      │    received            detected
-      │        │                  │
-      │        v                  v
-      │    [RUNNING]         [UNHEALTHY]
-      │                          │
-      │                   restart policy
-      │                   applied
-      │                  /          \
-      │          restart=yes     restart=no
-      │              │                │
-      │              v                v
-      └──────── [STARTING]      [STOPPED]
+      │                  │
+      │            process exit
+      │             detected
+      │                  │
+      │           restart policy
+      │              applied
+      │            /          \
+      │     restart=yes    restart=no
+      │         │               │
+      │         v               v
+      └──── [STARTING]     [STOPPED]
 ```
 
 States:
@@ -147,33 +173,63 @@ States:
 | State | Description |
 |---|---|
 | `STOPPED` | Not running; no PID |
-| `STARTING` | Process spawned; waiting for first heartbeat |
-| `RUNNING` | Healthy; heartbeats arriving on time |
-| `UNHEALTHY` | Heartbeat missed beyond timeout threshold |
+| `STARTING` | Process spawned; waiting for initialization to complete |
+| `RUNNING` | Process alive; activity loop active (user agents) or serving requests (infrastructure) |
 
-### 4.2 Health Check Loop
+There is no `UNHEALTHY` state. If a process exits, it is immediately either restarted or stopped based on policy.
 
-`system-master` runs a health check loop every **5 seconds**:
+### 4.2 Process Monitoring
 
-1. For each agent, compute `time_since_last_heartbeat`.
-2. If `>= 15s` and state is `RUNNING`, transition to `UNHEALTHY`.
-3. If `UNHEALTHY`, apply the agent's restart policy (see Section 5).
-4. If a heartbeat arrives for a `STARTING` agent, transition to `RUNNING`.
-5. Log all state transitions to `logs/system-master/state.log`.
+`system-master` monitors agents via **OS-level child process handling** only:
 
-### 4.3 System Dashboard (Optional, Phase 2)
+- Detects child process exit via `waitpid` / process handle callbacks.
+- On unexpected exit → apply restart policy (Section 5).
+- No heartbeat-based health checks. No polling. No timeouts.
+
+This is simple and reliable: if the process is running, it's alive.
+
+### 4.3 Status Broadcasting (Observability)
+
+User agents optionally publish **status events** (kind `4300`) every ~5 minutes for dashboard display:
+
+```json
+{
+  "kind": 4300,
+  "tags": [
+    ["agent_name", "user3"],
+    ["role", "user-agent"]
+  ],
+  "content": "{\"balance_sats\":500,\"programs_owned\":3,\"programs_listed\":1,\"active_trades\":0,\"last_action\":\"browse_marketplace\",\"tick_count\":42,\"ts\":1700000000}"
+}
+```
+
+Fields in `content`:
+
+| Field | Type | Description |
+|---|---|---|
+| `balance_sats` | int | Current Cashu wallet balance in sats |
+| `programs_owned` | int | Number of programs the agent has |
+| `programs_listed` | int | Number of programs listed for sale |
+| `active_trades` | int | Number of in-flight trade negotiations |
+| `last_action` | string | What the agent did on its last tick |
+| `tick_count` | int | Total ticks since agent started |
+| `ts` | int | Unix timestamp |
+
+**Important**: These status events are purely informational for the dashboard. `system-master` does **not** consume or act on them.
+
+### 4.4 System Dashboard
 
 A simple status endpoint or CLI command that prints a table:
 
 ```
-Agent         State      Last Beat   Uptime    Restarts
-───────────── ────────── ─────────── ───────── ────────
-nostr-relay   RUNNING    2s ago      1h 23m    0
-cashu-mint    RUNNING    1s ago      1h 23m    0
-user0         RUNNING    3s ago      1h 22m    1
-user1         UNHEALTHY  18s ago     0h 04m    3
+Agent         State      PID     Uptime    Restarts  Last Action
+───────────── ────────── ─────── ───────── ───────── ──────────────────
+nostr-relay   RUNNING    12345   1h 23m    0         (server)
+cashu-mint    RUNNING    12346   1h 23m    0         (server)
+user0         RUNNING    12350   1h 22m    1         generate_program
+user1         RUNNING    12351   0h 04m    3         browse_marketplace
 ...
-user9         RUNNING    0s ago      1h 22m    0
+user9         RUNNING    12359   1h 22m    0         idle
 ```
 
 ---
@@ -185,13 +241,13 @@ user9         RUNNING    0s ago      1h 22m    0
 1. `system-master` reads the agent manifest.
 2. Spawns the agent process, sets state to `STARTING`.
 3. Starts a **startup timeout** of **30 seconds**.
-4. If the agent sends its first heartbeat within the timeout, state becomes `RUNNING`.
-5. If the timeout expires without a heartbeat, state becomes `UNHEALTHY` and the restart policy is applied.
+4. If the agent completes initialization (connects to relay, loads wallet) within the timeout, state becomes `RUNNING`.
+5. If the timeout expires, the restart policy is applied.
 
 ### 5.2 Graceful Stop
 
 1. `system-master` sends `SIGTERM` to the agent process.
-2. Agent receives the signal, publishes a final heartbeat with `status: "shutting-down"`, performs cleanup, and exits with code 0.
+2. Agent receives the signal, completes any in-flight trade, persists state to disk, and exits with code 0.
 3. `system-master` waits up to **10 seconds** for the process to exit.
 4. If the process does not exit, `system-master` sends `SIGKILL`.
 5. State becomes `STOPPED`.
@@ -203,9 +259,8 @@ A crash is detected when:
 - `system-master` receives the `exit` event on the child process handle.
 
 On crash:
-1. State transitions to `UNHEALTHY`.
-2. The crash is logged with exit code/signal, timestamp, and last 50 lines of the agent's stderr.
-3. Restart policy is applied immediately.
+1. The crash is logged with exit code/signal, timestamp, and last 50 lines of the agent's stderr.
+2. Restart policy is applied immediately.
 
 ### 5.4 Restart Policy
 
@@ -295,7 +350,7 @@ If `system-master` itself crashes (e.g., killed by OOM or operator error):
 
 1. On restart, `system-master` reads `data/system-master/pids.json` which records the PIDs of all spawned children.
 2. For each recorded PID, it checks if the process is still alive (`kill -0 <pid>`).
-3. If alive, it re-attaches monitoring (re-subscribes to heartbeats, re-pipes stdout for relay).
+3. If alive, it re-attaches monitoring (re-registers child process handles).
 4. If dead, it applies the restart policy.
 
 This allows `system-master` to recover without restarting all agents.
@@ -311,15 +366,15 @@ On startup, `system-master` also scans for orphan processes (agents running with
 ### 8.1 Current Scale
 
 - 10 user agents + 3 system processes = 13 total processes.
-- Heartbeat traffic: 13 events every 5 seconds = ~2.6 events/second on the local relay.
-- This is trivially handled by any Nostr relay implementation.
+- Status broadcasts: 13 agents × 1 event per ~5 minutes = negligible relay load.
+- Trade activity: ~1–2 Nostr events/minute per user agent during active trading.
 
 ### 8.2 Scaling Beyond 10 Users
 
 If the system needs more than 10 user agents:
 
 - The agent manifest supports arbitrary entries; adding `user10`..`user99` requires only config changes.
-- Heartbeat interval can be increased to 10s or 15s if relay load becomes a concern.
+- Activity tick interval can be increased to 120s or 300s to reduce event volume.
 - User agents can be grouped into **supervision groups** (e.g., `user0-9`, `user10-19`) with a sub-supervisor per group, creating a two-level tree.
 
 ### 8.3 Resource Limits
@@ -329,7 +384,7 @@ Each agent process should be constrained to prevent a single runaway agent from 
 | Resource | Limit | Mechanism |
 |---|---|---|
 | Memory | 256 MB per user agent | `resource.setrlimit()` (Python) or cgroup |
-| CPU | No hard limit (WSL2 shares host CPU) | Monitor via heartbeat `cpu_pct` field |
+| CPU | No hard limit (WSL2 shares host CPU) | Monitor via status broadcast or `ps` |
 | File descriptors | 1024 per agent | `ulimit -n` |
 | Disk (logs) | 50 MB per agent | Log rotation (keep last 5 files x 10 MB) |
 
@@ -407,8 +462,8 @@ In a later phase, `system-master` could accept control commands as Nostr events 
 | Decision | Rationale |
 |---|---|
 | Custom process manager over systemd | Avoids root requirement; works on all WSL2 setups; tighter integration with Nostr |
-| Nostr-based heartbeats | Reuses existing infrastructure; heartbeats are observable by any relay subscriber |
-| Pipe fallback for relay monitoring | Solves the chicken-and-egg problem of monitoring the relay via the relay |
+| Autonomous activity loop (~60s tick) | Agents self-direct economic actions (create, browse, trade) when idle |
+| OS-level process monitoring only | Simple `waitpid`-based crash detection; no heartbeat polling needed |
 | Flat supervision tree | 13 agents is small; simplicity over premature abstraction |
 | Exponential backoff on restarts | Prevents crash loops from consuming resources |
 | JSON state files for recovery | Simple, human-readable, no database dependency |

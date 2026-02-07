@@ -4,11 +4,11 @@
 
 User agent (`user0` から `user9`) は、Zap Empire における自律的な経済主体です。各 user agent は独立した Python プロセスであり、以下を行います:
 
-- **プログラムを作成する** -- 小さな Python ユーティリティ、スクリプト、ツールを生成する
-- **プログラムを出品する** -- Nostr marketplace (kind 30078) に広告を掲載する
-- **プログラムを購入する** -- 他の agent が出品したプログラムを発見・評価・購入する
-- **ウォレットを管理する** -- Cashu ecash を保有し、支払いの送受信を行う
-- **評判を構築する** -- 取引相手の信頼性を時間とともに追跡する
+- **プログラムを作成する** — 小さな Python ユーティリティ、スクリプト、ツールを生成する
+- **プログラムを出品する** — Nostr マーケットプレイス (kind 30078) に広告を掲載する
+- **プログラムを購入する** — 他の agent が出品したプログラムを発見・評価・購入する
+- **ウォレットを管理する** — Cashu ecash を保有し、支払いの送受信を行う
+- **評判を構築する** — 取引相手の信頼性を時間とともに追跡する
 
 User agent は人間の介入なしに動作します。何を作るか、何を買うか、価格をいくらに設定するか、誰と取引するかを自律的に判断します。各 agent は時間の経過とともに独自の経済的な性格と戦略を発展させます。
 
@@ -23,7 +23,7 @@ User agent は人間の介入なしに動作します。何を作るか、何を
 
 | サブシステム | ドキュメント | 連携 |
 |---|---|---|
-| プロセス管理 | `autonomy-design.md` | `system-master` が user agent を起動・監視; heartbeat (kind 4300, 5秒) |
+| プロセス管理 | `autonomy-design.md` | `system-master` が user agent を起動・監視; 自律活動ループ (約60秒のtick) |
 | Nostr relay | `nostr-design.md` | すべての agent 通信は `ws://127.0.0.1:7777` を経由 |
 | 決済システム | `zap-design.md` | Nutshell 経由の Cashu wallet (`cashu.wallet`)、mint は `http://127.0.0.1:3338` |
 | 正規の判断 | `review-notes.md` | ドキュメント間の矛盾に対する権威ある解決 |
@@ -49,7 +49,7 @@ User agent は人間の介入なしに動作します。何を作るか、何を
 │         │                 │                    │                │
 │  ┌──────┴─────────────────┴────────────────────┴───────────┐   │
 │  │                    Core Event Loop                       │   │
-│  │  - heartbeat ticker (kind 4300, every 5s)                │   │
+│  │  - autonomous activity tick (~60s)                        │   │
 │  │  - event dispatcher                                      │   │
 │  │  - state persistence (every 30s)                         │   │
 │  └──────┬─────────────────┬────────────────────┬───────────┘   │
@@ -88,7 +88,7 @@ User agent は人間の介入なしに動作します。何を作るか、何を
 | **Marketplace Scanner** | kind 30078 のリスティングを購読; カテゴリ・価格・説明でプログラムをフィルタリング・評価 |
 | **Trade Engine** | trade のフルステートマシンを管理 (4200→4201→4204→9735→4210→4203); タイムアウトとエラーリカバリを処理 |
 | **Strategy Engine** | agent のパーソナリティ、価格決定、売買閾値、信頼スコアリングを決定 |
-| **Core Event Loop** | すべてのモジュールを統括; 受信イベントをディスパッチ; heartbeat ticker を実行; 状態を永続化 |
+| **Core Event Loop** | すべてのモジュールを統括; 受信イベントをディスパッチ; 自律活動 tick (約60秒) を実行; 状態を永続化 |
 
 ---
 
@@ -102,14 +102,14 @@ User agent は小さく自己完結した **Python ユーティリティプロ�
 
 | カテゴリ | 例 | 典型的な価格帯 |
 |---|---|---|
-| **数学 & アルゴリズム** | フィボナッチ計算、素数判定、行列演算、ソートアルゴリズム | 50--200 sats |
-| **テキスト処理** | 文字列フォーマッター、CSV パーサー、正規表現マッチャー、Markdown コンバーター | 100--300 sats |
-| **データ構造** | カスタムコレクション、グラフ実装、木構造操作 | 200--500 sats |
-| **暗号 & エンコーディング** | Base64 コーデック、ハッシュ計算、簡易暗号、チェックサムツール | 150--400 sats |
-| **システムユーティリティ** | ファイルスキャナー、ディレクトリリスター、ログパーサー、設定リーダー | 200--500 sats |
-| **ジェネレーター** | パスワード生成、UUID 生成、ランダムデータ生成、テストフィクスチャ生成 | 100--300 sats |
-| **コンバーター** | 単位変換、日時フォーマッター、基数変換 | 100--250 sats |
-| **バリデーター** | メールバリデーター、JSON スキーマチェッカー、URL パーサー | 150--350 sats |
+| **数学 & アルゴリズム** | フィボナッチ計算、素数判定、行列演算、ソートアルゴリズム | 50–200 sats |
+| **テキスト処理** | 文字列フォーマッター、CSV パーサー、正規表現マッチャー、Markdown コンバーター | 100–300 sats |
+| **データ構造** | カスタムコレクション、グラフ実装、木構造操作 | 200–500 sats |
+| **暗号 & エンコーディング** | Base64 コーデック、ハッシュ計算、簡易暗号、チェックサムツール | 150–400 sats |
+| **システムユーティリティ** | ファイルスキャナー、ディレクトリリスター、ログパーサー、設定リーダー | 200–500 sats |
+| **ジェネレーター** | パスワード生成、UUID 生成、ランダムデータ生成、テストフィクスチャ生成 | 100–300 sats |
+| **コンバーター** | 単位変換、日時フォーマッター、基数変換 | 100–250 sats |
+| **バリデーター** | メールバリデーター、JSON スキーマチェッカー、URL パーサー | 150–350 sats |
 
 ### 3.2 生成プロセス
 
@@ -137,13 +137,13 @@ Templates DB          Randomizer              Output
 
 #### ステップバイステップ:
 
-1. **カテゴリ選択** -- 重み付きランダム選択。agent のパーソナリティに影響される (例: 「specialist」の agent は好みのカテゴリに重く重み付けする)。
-2. **テンプレート選択** -- 各カテゴリに複数のスケルトンテンプレートがある。テンプレートは関数シグネチャ、アルゴリズムパターン、入出力型の構造を定義する。
-3. **パラメータ化** -- ランダマイザーが変数名、パラメータ数、複雑度レベル (simple/medium/complex)、docstring、使用例を埋める。
-4. **組み立て** -- テンプレートのスケルトンと生成されたパラメータを組み合わせ、完全な `.py` ファイルにする。
-5. **Sandbox テスト** -- 制限された sandbox (セクション 5 参照) でプログラムを実行し、エラーなく動作することを検証する。
-6. **品質チェック** -- プログラムに docstring があること、少なくとも 1 つの関数があること、サンプル入力に対して出力が生成されることを検証する。
-7. **ローカルに保存** -- `data/<agent-id>/programs/<program-uuid>.py` に保存する。
+1. **カテゴリ選択** — 重み付きランダム選択。agent のパーソナリティに影響される (例: 「specialist」の agent は好みのカテゴリに重く重み付けする)。
+2. **テンプレート選択** — 各カテゴリに複数のスケルトンテンプレートがある。テンプレートは関数シグネチャ、アルゴリズムパターン、入出力型の構造を定義する。
+3. **パラメータ化** — ランダマイザーが変数名、パラメータ数、複雑度レベル (simple/medium/complex)、docstring、使用例を埋める。
+4. **組み立て** — テンプレートのスケルトンと生成されたパラメータを組み合わせ、完全な `.py` ファイルにする。
+5. **Sandbox テスト** — 制限された sandbox (セクション 5 参照) でプログラムを実行し、エラーなく動作することを検証する。
+6. **品質チェック** — プログラムに docstring があること、少なくとも 1 つの関数があること、サンプル入力に対して出力が生成されることを検証する。
+7. **ローカルに保存** — `data/<agent-id>/programs/<program-uuid>.py` に保存する。
 
 ### 3.3 テンプレート構造
 
@@ -192,9 +192,9 @@ if __name__ == "__main__":
 
 | Agent タイプ | サイクルあたりのプログラム数 | サイクル時間 |
 |---|---|---|
-| 積極的なクリエイター | 2--3 | 約 60 秒 |
-| バランス型 | 1--2 | 約 120 秒 |
-| 保守的 | 0--1 | 約 180 秒 |
+| 積極的なクリエイター | 2–3 | 約 60 秒 |
+| バランス型 | 1–2 | 約 120 秒 |
+| 保守的 | 0–1 | 約 180 秒 |
 
 「サイクル」とは agent のメイン判断ループの 1 周回です。すべてのサイクルでプログラムが生成されるわけではなく、agent は trade や購入に集中することを選択する場合があります。
 
@@ -220,7 +220,7 @@ Agent が販売準備のできたプログラムを持っている場合、kind 
 }
 ```
 
-パラメータ化置換可能イベント (NIP-33) として、同じ `d` tag で再発行するとリスティングがその場で更新されます。これは価格調整に便利です。
+パラメータ化置換可能イベント (NIP-33) として、同じ `d` tag で再発行するとリスティングがその場で更新されます — これは価格調整に便利です。
 
 ### 4.2 価格戦略
 
@@ -242,14 +242,13 @@ else:
 
 | 複雑度 | 係数 |
 |---|---|
-| Simple | 0.5x |
-| Medium | 1.0x |
-| Complex | 2.0x |
+| Simple | 0.5× |
+| Medium | 1.0× |
+| Complex | 2.0× |
 
 #### 価格調整トリガー
 
 Agent は以下の場合にプログラムの価格を再リスト (更新) することがあります:
-
 - プログラムが 5 分以上オファーなしでリストされている場合
 - 競合他社からより低価格の類似プログラムが複数出現した場合
 - Agent のウォレット残高が閾値を下回った場合 (投げ売り)
@@ -274,7 +273,6 @@ Agent はリスティングイベント ID を参照する kind 5 (NIP-09 削除
 ### 5.1 目的
 
 生成したプログラムを出品する前に、agent は sandbox で以下を検証します:
-
 - プログラムがクラッシュせずに実行されること
 - プログラムが制限時間内に終了すること
 - プログラムが危険な操作を試みないこと
@@ -310,11 +308,11 @@ def sandbox_test(program_path: str) -> bool:
 
 プログラムが出品されるには、以下のすべてに合格する必要があります:
 
-1. **構文チェック** -- `py_compile.compile()` が成功すること
-2. **静的解析** -- `os.system`、`subprocess`、`socket`、`http`、`shutil` のインポートがないこと
-3. **Sandbox 実行** -- 5 秒以内に正常に実行・終了すること
-4. **出力チェック** -- サンプル入力に対して空でない stdout を出力すること
-5. **サイズチェック** -- ソースコードが 100 バイト以上 50 KB 以下であること
+1. **構文チェック** — `py_compile.compile()` が成功すること
+2. **静的解析** — `os.system`、`subprocess`、`socket`、`http`、`shutil` のインポートがないこと
+3. **Sandbox 実行** — 5 秒以内に正常に実行・終了すること
+4. **出力チェック** — サンプル入力に対して空でない stdout を出力すること
+5. **サイズチェック** — ソースコードが 100 バイト以上 50 KB 以下であること
 
 いずれかのチェックに失敗したプログラムは破棄されます。Agent は失敗をログに記録して次に進みます。
 
@@ -359,11 +357,10 @@ spending_ratio by personality:
 
 ### 6.2 販売の判断
 
-Agent は常に販売します -- リストされたプログラムはすべて売りに出されています。ただし agent は以下を制御します:
-
-- **どのプログラムをリストするか** -- 生成したプログラムのすべてがリストされるわけではなく、品質の低いものは保持または破棄される
-- **価格設定** -- セクション 4.2 参照
-- **オファーの受諾** -- agent は安すぎるオファーを拒否したりカウンターオファーしたりする場合がある
+Agent は常に販売します — リストされたプログラムはすべて売りに出されています。ただし agent は以下を制御します:
+- **どのプログラムをリストするか** — 生成したプログラムのすべてがリストされるわけではなく、品質の低いものは保持または破棄される
+- **価格設定** — セクション 4.2 参照
+- **オファーの受諾** — agent は安すぎるオファーを拒否したりカウンターオファーしたりする場合がある
 
 #### オファー評価
 
@@ -640,7 +637,7 @@ on_trade_complete(event):  # kind 4203
 |---|---|---|
 | `user0`, `user1` | **Conservative** | 慎重なトレーダー。高価格、慎重な購入、高い信頼要件。ゆっくりと構築する。 |
 | `user2`, `user3` | **Aggressive** | 大量取引のトレーダー。低価格、頻繁な購入、より多くのリスクを受容する。 |
-| `user4`, `user5` | **Specialist** | 1--2 のプログラムカテゴリに集中。深い専門性を構築する。ニッチでのプレミアム価格。 |
+| `user4`, `user5` | **Specialist** | 1–2 のプログラムカテゴリに集中。深い専門性を構築する。ニッチでのプレミアム価格。 |
 | `user6`, `user7` | **Generalist** | 全カテゴリにわたる幅広いポートフォリオ。中程度の価格設定。多様性を求める。 |
 | `user8`, `user9` | **Opportunist** | 市場状況に応じて戦略を適応させる。成功パターンを模倣する。過小評価されたプログラムを購入する。 |
 
@@ -756,9 +753,9 @@ trust = trust × 0.99 + 0.5 × 0.01   # per cycle, slow regression to mean
 
 信頼スコアは購入と販売の両方の判断に影響します:
 
-- **購入**: `buyer_willingness = base_willingness x seller_trust`。低信頼の売り手はより良い価格を提示する必要がある。
+- **購入**: `buyer_willingness = base_willingness × seller_trust`。低信頼の売り手はより良い価格を提示する必要がある。
 - **販売**: Agent は信頼が非常に低い買い手 (`trust_minimum` 未満) からのオファーを、たとえ全額であっても拒否する場合がある。
-- **エスクロー判断**: 低信頼のパートナー (0.4 未満) との高額 trade (500 sats 超) の場合、agent は直接支払いの代わりにエスクロー (kind 4220--4223) を要求する場合がある。
+- **エスクロー判断**: 低信頼のパートナー (0.4 未満) との高額 trade (500 sats 超) の場合、agent は直接支払いの代わりにエスクロー (kind 4220–4223) を要求する場合がある。
 
 ---
 
@@ -808,9 +805,9 @@ Agent Start (spawned by system-master)
     │       kind 4210   — program deliveries directed at self
     │       kind 9735   — zap receipts mentioning self
     │
-    ├── 8. Publish first heartbeat (kind 4300)
+    ├── 8. Publish initial status broadcast (kind 4300)
     │
-    └── 9. Enter main event loop
+    └── 9. Enter autonomous activity loop
 ```
 
 ### 10.2 メインイベントループ
@@ -818,58 +815,59 @@ Agent Start (spawned by system-master)
 Agent は Python の `asyncio` を使用した単一スレッドの非同期イベントループで動作します:
 
 ```
-Main Event Loop (runs until SIGTERM)
+自律活動ループ (SIGTERM を受信するまで実行)
     │
-    ├── Every 5 seconds:
-    │       Publish heartbeat (kind 4300)
-    │
-    ├── Every 30 seconds:
-    │       Persist state to data/<agent-id>/state.json
-    │
-    ├── Every cycle (~30-180 seconds, personality-dependent):
-    │       ┌── Decision Phase ──────────────────────────┐
+    ├── 約 60 秒ごと (tick_interval、設定可能):
+    │       ┌── 活動 Tick ─────────────────────────────┐
     │       │                                            │
-    │       │  1. Check wallet balance                   │
-    │       │  2. Scan marketplace for interesting buys  │
-    │       │  3. Decide: create program, buy, or idle   │
+    │       │  1. 保留中の trade メッセージを確認        │
+    │       │  2. 保留中あり → trade を処理              │
+    │       │  3. なければ → 自律行動:                   │
+    │       │     a. ウォレット残高を確認                 │
+    │       │     b. マーケットプレイスで購入候補をスキャン│
+    │       │     c. 判断: プログラム作成、購入、待機      │
     │       │                                            │
-    │       │  If CREATE:                                │
-    │       │    Generate program                        │
-    │       │    Sandbox test                            │
-    │       │    Publish listing (kind 30078)            │
+    │       │  ステータスブロードキャスト (5 tick ごと)    │
     │       │                                            │
-    │       │  If BUY:                                   │
-    │       │    Publish offer (kind 4200)               │
+    │       │  CREATE の場合:                             │
+    │       │    プログラムを生成                         │
+    │       │    Sandbox テスト                           │
+    │       │    リスティングを発行 (kind 30078)          │
     │       │                                            │
-    │       │  If IDLE:                                  │
-    │       │    Adjust prices on unsold listings        │
-    │       │    Review trust scores                     │
+    │       │  BUY の場合:                               │
+    │       │    オファーを発行 (kind 4200)               │
+    │       │                                            │
+    │       │  IDLE の場合:                              │
+    │       │    未販売リスティングの価格を調整            │
+    │       │    信頼スコアをレビュー                     │
     │       └────────────────────────────────────────────┘
     │
-    ├── On incoming event:
-    │       Dispatch to appropriate handler:
-    │       - kind 4200: on_trade_offer() (seller path)
-    │       - kind 4201: on_trade_accept() (buyer path)
-    │       - kind 4202: on_trade_reject() (buyer path)
-    │       - kind 4204: on_payment_received() (seller path)
-    │       - kind 4210: on_program_delivery() (buyer path)
-    │       - kind 4203: on_trade_complete() (seller path)
-    │       - kind 9735: on_zap_receipt() (logging)
-    │       - kind 30078: on_new_listing() (marketplace scan)
+    ├── 30 秒ごと:
+    │       状態を data/<agent-id>/state.json に永続化
     │
-    └── On timeout:
-            Handle expired trades (see Section 7.3)
+    ├── 受信イベント時 (tick の間に処理):
+    │       適切なハンドラにディスパッチ:
+    │       - kind 4200: on_trade_offer() (売り手パス)
+    │       - kind 4201: on_trade_accept() (買い手パス)
+    │       - kind 4202: on_trade_reject() (買い手パス)
+    │       - kind 4204: on_payment_received() (売り手パス)
+    │       - kind 4210: on_program_delivery() (買い手パス)
+    │       - kind 4203: on_trade_complete() (売り手パス)
+    │       - kind 9735: on_zap_receipt() (ロギング)
+    │       - kind 30078: on_new_listing() (マーケットプレイススキャン)
+    │
+    └── タイムアウト時:
+            期限切れの trade を処理 (セクション 7.3 参照)
 ```
 
 ### 10.3 正常なシャットダウン
 
 `system-master` から `SIGTERM` を受信した場合:
 
-1. **新しい trade の作成を停止** -- 新しいオファーやリスティングを作成しない
-2. **進行中の trade を待機** -- アクティブな trade が完了するまで最大 10 秒待つ
-3. **最終 heartbeat を発行** -- `status: "shutting-down"` の kind 4300
-4. **状態を永続化** -- 現在のすべてのデータで `state.json` に書き込む
-5. **WebSocket を閉じる** -- relay から切断
+1. **新しい trade の作成を停止** — 新しいオファーやリスティングを作成しない
+2. **進行中の trade を待機** — アクティブな trade が完了するまで最大 10 秒待つ
+3. **状態を永続化** — 現在のすべてのデータで `state.json` に書き込む
+5. **WebSocket を閉じる** — relay から切断
 6. **終了コード 0 で終了**
 
 `SIGKILL` を受信した場合 (10 秒の猶予期間後)、agent は即座に強制終了されます。次回の再起動時に、最後の `state.json` チェックポイントから回復します。
@@ -878,9 +876,9 @@ Main Event Loop (runs until SIGTERM)
 
 ## 11. メトリクスと観測可能性
 
-### 11.1 Heartbeat データ (Kind 4300)
+### 11.1 ステータスブロードキャスト (Kind 4300)
 
-5 秒ごとに、agent はダッシュボード向けのメトリクスを含む heartbeat を発行します:
+約 5 分ごと (活動 tick 5 回ごと)、agent はダッシュボード向けのステータスブロードキャストを発行します。これは **純粋に情報提供用** であり、ヘルスモニタリングには使用されません。
 
 ```json
 {
@@ -889,19 +887,18 @@ Main Event Loop (runs until SIGTERM)
     ["agent_name", "user3"],
     ["role", "user-agent"]
   ],
-  "content": "{\"status\":\"healthy\",\"uptime_secs\":3621,\"mem_mb\":42,\"balance_sats\":500,\"programs_owned\":3,\"programs_listed\":1,\"active_trades\":0,\"ts\":1700000000}"
+  "content": "{\"balance_sats\":500,\"programs_owned\":3,\"programs_listed\":1,\"active_trades\":0,\"last_action\":\"generate_program\",\"tick_count\":42,\"ts\":1700000000}"
 }
 ```
 
 | フィールド | 型 | ソース |
 |---|---|---|
-| `status` | string | `healthy` / `degraded` / `shutting-down` |
-| `uptime_secs` | int | agent プロセス起動からの経過時間 |
-| `mem_mb` | int | 常駐メモリ使用量 |
 | `balance_sats` | int | 利用可能な Cashu wallet 残高 |
 | `programs_owned` | int | ローカルインベントリ内の総プログラム数 |
 | `programs_listed` | int | 現在販売中のプログラム数 |
 | `active_trades` | int | 進行中の trade ネゴシエーション数 |
+| `last_action` | string | 直近の tick で実行されたアクション |
+| `tick_count` | int | agent 起動後の累計 tick 数 |
 | `ts` | int | Unix タイムスタンプ |
 
 ### 11.2 Agent 状態ファイル
@@ -954,7 +951,7 @@ Web ダッシュボード (`nostr-design.md` セクション 9) は user agent �
 
 | ダッシュボードビュー | データソース |
 |---|---|
-| Agent 概要テーブル | Kind 4300 heartbeat |
+| Agent 概要テーブル | Kind 4300 ステータスブロードキャスト |
 | マーケットプレイスリスティング | Kind 30078 イベント |
 | Trade アクティビティフィード | Kind 4200, 4201, 4202, 4203, 4204, 4210, 9735 |
 | Agent ポートフォリオ | pubkey でフィルタされた Kind 30078 イベント |
@@ -1068,4 +1065,4 @@ logs/
 | 単一スレッドの非同期ループ | シンプルな並行性モデル; レースコンディションを回避; 10 体の agent 規模で十分 |
 | subprocess によるサンドボックス | 軽量、標準ライブラリのみ; 生成されたプログラムによる害を防止 |
 | 30 秒ごとの状態永続化 | 耐久性と I/O オーバーヘッドのバランス; `autonomy-design.md` と整合 |
-| 5 秒間隔の Kind 4300 heartbeat | `system-master` による高速なヘルス検出; 許容範囲の relay 負荷 (合計 約 2.6 イベント/秒) |
+| 自律活動ループ (約60秒の tick) | Agent がアイドル時に自己判断 (作成、閲覧、取引); ダッシュボード向けに約 5 分ごとのステータスブロードキャスト |
