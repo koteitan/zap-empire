@@ -91,10 +91,10 @@ class WalletManager:
         return received
 
     async def deduct(self, amount: int) -> bool:
-        """Deduct sats from balance (internal burn, e.g. production cost).
+        """Deduct sats from balance (production cost → treasury).
 
-        Selects proofs covering the amount and invalidates them locally.
-        The proofs become unspendable since the secrets are discarded.
+        Creates a Cashu token and saves it to data/treasury/ for
+        system-master to redeem later. No sats are burned.
         Returns True if deduction succeeded.
         """
         if not self._initialized:
@@ -107,15 +107,31 @@ class WalletManager:
         try:
             await self.wallet.load_proofs()
 
-            # swap_to_send splits off exactly `amount` sats worth of proofs
-            keep_proofs, burn_proofs = await self.wallet.swap_to_send(
+            keep_proofs, send_proofs = await self.wallet.swap_to_send(
                 self.wallet.proofs, amount
             )
 
-            # Invalidate the burn proofs locally (effectively burns them)
-            await self.wallet.invalidate(burn_proofs)
+            # Serialize as redeemable token
+            token = await self.wallet.serialize_proofs(send_proofs)
 
-            logger.info(f"{self.agent_id}: Burned {amount} sats (production cost)")
+            # Remove from local wallet
+            await self.wallet.invalidate(send_proofs)
+
+            # Save token to treasury for system-master to collect
+            import json, time
+            treasury_dir = os.path.join(self.data_dir, "treasury")
+            os.makedirs(treasury_dir, exist_ok=True)
+            entry = {
+                "ts": int(time.time()),
+                "agent": self.agent_id,
+                "amount": amount,
+                "token": token,
+                "reason": "production_cost",
+            }
+            with open(os.path.join(treasury_dir, "tokens.jsonl"), "a") as f:
+                f.write(json.dumps(entry) + "\n")
+
+            logger.info(f"{self.agent_id}: Paid {amount} sats to treasury (production cost)")
             return True
         except Exception as e:
             logger.error(f"{self.agent_id}: Deduct failed: {e}")

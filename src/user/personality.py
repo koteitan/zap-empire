@@ -3,9 +3,9 @@
 PERSONALITIES = {
     "conservative": {
         "price_multiplier": 1.2,
-        "spending_ratio": 0.10,
-        "accept_threshold": 0.95,
-        "trust_minimum": 0.6,
+        "spending_ratio": 0.35,
+        "accept_threshold": 0.90,
+        "trust_minimum": 0.5,
         "creation_rate": "low",
         "category_focus": None,
         "risk_tolerance": 0.2,
@@ -13,8 +13,8 @@ PERSONALITIES = {
     },
     "aggressive": {
         "price_multiplier": 0.8,
-        "spending_ratio": 0.35,
-        "accept_threshold": 0.70,
+        "spending_ratio": 0.65,
+        "accept_threshold": 0.65,
         "trust_minimum": 0.3,
         "creation_rate": "high",
         "category_focus": None,
@@ -23,9 +23,9 @@ PERSONALITIES = {
     },
     "specialist": {
         "price_multiplier": 1.3,
-        "spending_ratio": 0.20,
-        "accept_threshold": 0.90,
-        "trust_minimum": 0.5,
+        "spending_ratio": 0.50,
+        "accept_threshold": 0.85,
+        "trust_minimum": 0.4,
         "creation_rate": "medium",
         "category_focus": None,  # Set per-agent
         "risk_tolerance": 0.4,
@@ -34,9 +34,9 @@ PERSONALITIES = {
     },
     "generalist": {
         "price_multiplier": 1.0,
-        "spending_ratio": 0.25,
-        "accept_threshold": 0.85,
-        "trust_minimum": 0.4,
+        "spending_ratio": 0.55,
+        "accept_threshold": 0.80,
+        "trust_minimum": 0.35,
         "creation_rate": "medium",
         "category_focus": None,
         "risk_tolerance": 0.5,
@@ -44,9 +44,9 @@ PERSONALITIES = {
     },
     "opportunist": {
         "price_multiplier": 1.0,
-        "spending_ratio": 0.30,
-        "accept_threshold": 0.75,
-        "trust_minimum": 0.35,
+        "spending_ratio": 0.60,
+        "accept_threshold": 0.70,
+        "trust_minimum": 0.3,
         "creation_rate": "adaptive",
         "category_focus": "adaptive",
         "risk_tolerance": 0.6,

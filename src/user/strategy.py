@@ -8,14 +8,14 @@ logger = logging.getLogger(__name__)
 
 # Category base prices
 CATEGORY_BASE_PRICES = {
-    "math": 150,
-    "text": 200,
-    "data_structures": 350,
-    "crypto": 275,
-    "utilities": 350,
-    "generators": 200,
-    "converters": 175,
-    "validators": 250,
+    "math": 10,
+    "text": 12,
+    "data_structures": 16,
+    "crypto": 14,
+    "utilities": 14,
+    "generators": 10,
+    "converters": 10,
+    "validators": 12,
 }
 
 COMPLEXITY_FACTORS = {
@@ -39,7 +39,7 @@ class StrategyEngine:
     def __init__(self, personality_params: dict, balance_fn: Callable[[], int]):
         self.params = personality_params
         self.get_balance = balance_fn
-        self._initial_balance = 10000
+        self._initial_balance = balance_fn() or 100
 
     def get_budget_limit(self) -> int:
         """Max amount willing to spend on a single trade."""
@@ -177,7 +177,7 @@ class StrategyEngine:
             return "idle"
 
         # Priority 2: Consider buying if marketplace has items
-        if listings_available and balance > 500:
+        if listings_available and balance > 20:
             if random.random() < 0.3:
                 return "buy"
 

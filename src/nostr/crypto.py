@@ -1,7 +1,7 @@
 """
 Nostr key management, BIP-340 Schnorr signatures, and NIP-04 encryption.
 
-Uses secp256k1 for key operations/ECDH and pycryptodome for AES-256-CBC.
+Uses secp256k1 for signing, coincurve FFI for ECDH, pycryptodome for AES-256-CBC.
 """
 
 import hashlib
@@ -9,9 +9,22 @@ import os
 from pathlib import Path
 
 import secp256k1
+from coincurve import PrivateKey as CoinPrivateKey
+from coincurve._libsecp256k1 import ffi as _ffi, lib as _lib
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 import base64
+
+
+# Custom ECDH hash: return raw x-coordinate (32 bytes), parity-independent.
+# This matches NIP-04 spec where shared secret = x-coordinate of shared point.
+@_ffi.callback('int(unsigned char *, const unsigned char *, const unsigned char *, void *)')
+def _ecdh_hash_x_only(output, x32, y32, data):
+    _ffi.memmove(output, x32, 32)
+    return 1
+
+
+_secp256k1_ctx = _lib.secp256k1_context_create(769)  # SIGN | VERIFY
 
 
 class KeyPair:
@@ -97,14 +110,21 @@ def verify_schnorr(pubkey_bytes: bytes, message_bytes: bytes, signature_bytes: b
 def _compute_shared_secret(our_privkey_hex: str, their_pubkey_hex: str) -> bytes:
     """Compute NIP-04 shared secret via ECDH.
 
-    Returns 32-byte shared secret (raw ECDH output).
+    Returns raw 32-byte x-coordinate of the shared point (parity-independent).
+    Uses secp256k1 C library directly with a custom hash callback.
     """
-    privkey = secp256k1.PrivateKey(bytes.fromhex(our_privkey_hex))
-    # Add 02 prefix to make compressed public key
-    their_pubkey_obj = secp256k1.PublicKey(b"\x02" + bytes.fromhex(their_pubkey_hex), raw=True)
-    # ECDH returns 32-byte shared secret (x-coordinate of shared point, SHA256'd)
-    shared = privkey.ecdh(their_pubkey_obj.serialize())
-    return shared
+    our_sk = CoinPrivateKey(bytes.fromhex(our_privkey_hex))
+    pubkey_buf = _ffi.new('secp256k1_pubkey *')
+    _lib.secp256k1_ec_pubkey_parse(
+        _secp256k1_ctx, pubkey_buf,
+        b"\x02" + bytes.fromhex(their_pubkey_hex), 33,
+    )
+    output = _ffi.new('unsigned char [32]')
+    _lib.secp256k1_ecdh(
+        _secp256k1_ctx, output, pubkey_buf,
+        our_sk.secret, _ecdh_hash_x_only, _ffi.NULL,
+    )
+    return bytes(_ffi.buffer(output, 32))
 
 
 def nip04_encrypt(sender_privkey_hex: str, recipient_pubkey_hex: str, plaintext: str) -> str:

@@ -64,7 +64,7 @@ if __name__ == "__main__":
     return a''',
             },
             "limits": {"recursive": 15, "iterative": 20, "memoized": 30, "generator": 20},
-            "base_price": 100,
+            "base_price": 11,
         },
         {
             "name_pattern": "prime-{variant}",
@@ -148,7 +148,7 @@ if __name__ == "__main__":
                 "factorizer": "Computes the prime factorization of a number.",
                 "counter": "Counts prime numbers up to a given limit.",
             },
-            "base_price": 120,
+            "base_price": 13,
         },
         {
             "name_pattern": "gcd-{variant}",
@@ -192,7 +192,7 @@ def lcm(a, b):
                 "euclidean": '    pairs = [(48, 18), (100, 75), (35, 14), (270, 192)]\n    for a, b in pairs:\n        print(f"GCD({a}, {b}) = {gcd(a, b)}, LCM({a}, {b}) = {lcm(a, b)}")',
                 "extended": '    pairs = [(35, 15), (100, 42), (56, 98)]\n    for a, b in pairs:\n        g, x, y = extended_gcd(a, b)\n        print(f"GCD({a}, {b}) = {g}, {a}*{x} + {b}*{y} = {a*x + b*y}")',
             },
-            "base_price": 90,
+            "base_price": 10,
         },
         {
             "name_pattern": "factorial-{variant}",
@@ -209,7 +209,7 @@ Computes factorials using {variant} method.
 def main():
     print("=== Factorial ({variant}) ===")
     for n in range({limit}):
-        print(f"{n}! = {{factorial(n)}}")
+        print(f"{{n}}! = {{factorial(n)}}")
 
 
 if __name__ == "__main__":
@@ -242,7 +242,7 @@ def factorial(n):
     return result''',
             },
             "limits": {"recursive": 15, "iterative": 20, "table": 20},
-            "base_price": 80,
+            "base_price": 9,
         },
     ],
     "text": [
@@ -364,7 +364,7 @@ def run_length_decode(s):
                 "formatter": "Format and style text output.",
                 "compressor": "Run-length encode and decode strings.",
             },
-            "base_price": 100,
+            "base_price": 11,
         },
         {
             "name_pattern": "word-{variant}",
@@ -429,7 +429,7 @@ def find_longest(text, n=5):
                 "sorter": "Sort words alphabetically or by length.",
                 "finder": "Find words matching patterns.",
             },
-            "base_price": 90,
+            "base_price": 10,
         },
         {
             "name_pattern": "caesar-cipher-{variant}",
@@ -495,7 +495,7 @@ def caesar_crack(ciphertext):
                 "basic": "Encrypt and decrypt with Caesar cipher.",
                 "cracker": "Brute-force crack Caesar cipher.",
             },
-            "base_price": 110,
+            "base_price": 12,
         },
     ],
     "data_structures": [
@@ -589,7 +589,7 @@ if __name__ == "__main__":
                 "basic": "Simple stack with push, pop, peek.",
                 "minstack": "Stack with O(1) minimum query.",
             },
-            "base_price": 130,
+            "base_price": 14,
         },
         {
             "name_pattern": "queue-{variant}",
@@ -745,7 +745,7 @@ if __name__ == "__main__":
                 "circular": "Fixed-size circular queue.",
                 "priority": "Min-heap priority queue.",
             },
-            "base_price": 140,
+            "base_price": 16,
         },
         {
             "name_pattern": "binary-search-{variant}",
@@ -810,7 +810,7 @@ def lower_bound(arr, target):
                 "iterative": '    arr = [2, 5, 8, 12, 16, 23, 38, 56, 72, 91]\n    for target in [23, 72, 10, 91, 1]:\n        idx = binary_search(arr, target)\n        lb = lower_bound(arr, target)\n        print(f"Search {target}: index={idx}, lower_bound={lb}")',
                 "recursive": '    arr = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19]\n    for target in [7, 15, 4, 19, 0]:\n        idx = binary_search(arr, target)\n        print(f"Search {target}: index={idx}")',
             },
-            "base_price": 110,
+            "base_price": 12,
         },
     ],
     "crypto": [
@@ -858,7 +858,7 @@ def decode_urlsafe(encoded):
                 "codec": '    tests = ["Hello, World!", "Python is great!", "base64 encoding test"]\n    for text in tests:\n        enc = encode(text)\n        dec = decode(enc)\n        print(f"{text} -> {enc} -> {dec}")',
                 "urlsafe": '    tests = ["https://example.com/path?q=1&r=2", "data+with/special=chars"]\n    for text in tests:\n        enc = encode_urlsafe(text)\n        dec = decode_urlsafe(enc)\n        print(f"{text}\\n  -> {enc}\\n  -> {dec}")',
             },
-            "base_price": 90,
+            "base_price": 10,
         },
         {
             "name_pattern": "hash-{variant}",
@@ -925,7 +925,7 @@ def hash_chain(text, iterations=1000, algorithm="sha256"):
                 "calculator": "Compute hash digests with multiple algorithms.",
                 "verifier": "Verify data integrity using hashes.",
             },
-            "base_price": 100,
+            "base_price": 11,
         },
         {
             "name_pattern": "rot13-{variant}",
@@ -979,7 +979,7 @@ if __name__ == "__main__":
                 "basic": "Classic ROT13 cipher.",
                 "rotN": "Generalized rotation cipher.",
             },
-            "base_price": 80,
+            "base_price": 9,
         },
         {
             "name_pattern": "xor-cipher-{variant}",
@@ -1038,7 +1038,7 @@ def xor_decrypt_repeating(data, key):
                 "basic": "Single-byte XOR encryption.",
                 "repeating": "Repeating-key XOR cipher.",
             },
-            "base_price": 110,
+            "base_price": 12,
         },
     ],
     "utilities": [
@@ -1103,7 +1103,7 @@ def estimate_csv_size(rows, cols, avg_cell_len=8):
                 "formatter": "Format and parse file sizes.",
                 "estimator": "Estimate file sizes for various formats.",
             },
-            "base_price": 80,
+            "base_price": 9,
         },
         {
             "name_pattern": "counter-{variant}",
@@ -1203,7 +1203,7 @@ class RateCounter:
                 "basic": "Counter with history and statistics.",
                 "rate": "Rate counter for measuring event frequency.",
             },
-            "base_price": 70,
+            "base_price": 8,
         },
         {
             "name_pattern": "timer-{variant}",
@@ -1300,7 +1300,7 @@ if __name__ == "__main__":
                 "stopwatch": "Stopwatch with laps and formatting.",
                 "countdown": "Countdown timer with progress tracking.",
             },
-            "base_price": 90,
+            "base_price": 10,
         },
     ],
     "generators": [
@@ -1392,7 +1392,7 @@ def strength_label(score):
                 "generator": "Generate random passwords and passphrases.",
                 "strength": "Check password strength.",
             },
-            "base_price": 100,
+            "base_price": 11,
         },
         {
             "name_pattern": "uuid-{variant}",
@@ -1482,7 +1482,7 @@ def parse_uuid(uuid_str):
                 "maker": "Generate UUIDs and short IDs.",
                 "parser": "Parse and analyze UUID strings.",
             },
-            "base_price": 90,
+            "base_price": 10,
         },
         {
             "name_pattern": "random-data-{variant}",
@@ -1567,7 +1567,7 @@ def reservoir_sample(stream, k):
                 "generator": "Generate random names, emails, IPs, colors.",
                 "sampler": "Weighted and reservoir sampling algorithms.",
             },
-            "base_price": 100,
+            "base_price": 11,
         },
     ],
     "converters": [
@@ -1646,7 +1646,7 @@ def conversion_table(start=-20, end=100, step=10):
                 "converter": '    conversions = [\n        (100, "C", "F"), (212, "F", "C"), (0, "C", "K"),\n        (373.15, "K", "C"), (98.6, "F", "K"),\n    ]\n    for val, f, t in conversions:\n        result = convert(val, f, t)\n        print(f"  {val}{f} = {result:.2f}{t}")',
                 "table": '    table = conversion_table(-20, 100, 20)\n    print(f"  {\'Celsius\':>10s} {\'Fahrenheit\':>12s} {\'Kelvin\':>10s}")\n    print(f"  {\'-\'*10} {\'-\'*12} {\'-\'*10}")\n    for row in table:\n        print(f"  {row[\'celsius\']:>10.1f} {row[\'fahrenheit\']:>12.1f} {row[\'kelvin\']:>10.2f}")',
             },
-            "base_price": 70,
+            "base_price": 8,
         },
         {
             "name_pattern": "base-{variant}",
@@ -1723,7 +1723,7 @@ def multi_base(num):
                 "converter": '    conversions = [\n        ("ff", 16, 10), ("1010", 2, 16), ("255", 10, 2),\n        ("777", 8, 10), ("100", 10, 8),\n    ]\n    for s, fb, tb in conversions:\n        result = convert_base(s, fb, tb)\n        print(f"  {s} (base {fb}) = {result} (base {tb})")',
                 "calculator": '    for num in [42, 255, 1024, 65535]:\n        info = multi_base(num)\n        print(f"  {num}:")\n        for name, val in info.items():\n            print(f"    {name}: {val}")',
             },
-            "base_price": 100,
+            "base_price": 11,
         },
         {
             "name_pattern": "unit-{variant}",
@@ -1798,7 +1798,7 @@ def to_meters(value, unit):
                 "converter": "General unit conversion between metric and imperial.",
                 "distance": "Distance conversion between multiple units.",
             },
-            "base_price": 80,
+            "base_price": 9,
         },
     ],
     "validators": [
@@ -1855,7 +1855,7 @@ def validate_emails(emails):
                 "validator": "Validate email address format.",
                 "parser": "Parse email addresses into components.",
             },
-            "base_price": 90,
+            "base_price": 10,
         },
         {
             "name_pattern": "json-{variant}",
@@ -1942,7 +1942,7 @@ def sort_keys(text):
                 "checker": "Validate and analyze JSON data.",
                 "formatter": "Format and pretty-print JSON.",
             },
-            "base_price": 100,
+            "base_price": 11,
         },
         {
             "name_pattern": "url-{variant}",
@@ -2017,7 +2017,7 @@ def classify_url(url):
                 "parser": "Parse URLs into components.",
                 "validator": "Validate and classify URLs.",
             },
-            "base_price": 90,
+            "base_price": 10,
         },
     ],
 }
