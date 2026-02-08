@@ -153,7 +153,7 @@ def call_llm(system_prompt, user_prompt):
         result = subprocess.run(
             [CLAUDE_CMD, "-p", "--model", "haiku",
              "--system-prompt", system_prompt],
-            input=user_prompt, capture_output=True, text=True, timeout=60
+            input=user_prompt, capture_output=True, text=True, timeout=120
         )
         return result.stdout.strip()
     except Exception as e:
@@ -306,10 +306,12 @@ def agent_think(agent_idx, chat_log, balance, listings):
             action = line_clean
             break
 
-    # Find message in 「...」format
-    m = re.search(r"[^「]*「([^」]+)」", response)
+    # Find message in 「...」format (greedy match to handle nested brackets)
+    m = re.search(r"「(.+)」", response, re.DOTALL)
     if m:
-        message = f"{name}「{m.group(1)}」"
+        # Take from first 「 to last 」
+        inner = m.group(1).strip()
+        message = f"{name}「{inner}」"
     else:
         # Fallback: find any line with the agent's name
         for line in response.strip().split("\n"):
